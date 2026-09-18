@@ -141,7 +141,7 @@ describe('getAvailableCliUpdate', () => {
 
     expect(requests).toHaveLength(1);
     expect(requests[0].method).toBe('GET');
-    expect(requests[0].url).toBe('/@fission-ai/openspec/latest');
+    expect(requests[0].url).toBe('/@sagecool/openspec/latest');
     // npm serves application/vnd.npm.install-v1+json only on the full
     // packument; asking for it here returns 406 and silently disables the
     // whole check.
@@ -163,7 +163,7 @@ describe('getAvailableCliUpdate', () => {
     respond = (res) => {
       hop += 1;
       if (hop === 1) {
-        res.writeHead(302, { location: '/elsewhere/@fission-ai/openspec/latest' });
+        res.writeHead(302, { location: '/elsewhere/@sagecool/openspec/latest' });
         res.end();
         return;
       }
@@ -172,7 +172,7 @@ describe('getAvailableCliUpdate', () => {
     };
 
     await expect(getAvailableCliUpdate()).resolves.toBe(bumpMajor(OPENSPEC_VERSION));
-    expect(requests[1].url).toBe('/elsewhere/@fission-ai/openspec/latest');
+    expect(requests[1].url).toBe('/elsewhere/@sagecool/openspec/latest');
   });
 
   it('gives up rather than following a redirect loop', async () => {
@@ -225,7 +225,7 @@ describe('getAvailableCliUpdate', () => {
     respond = (res) => {
       hop += 1;
       if (hop === 1) {
-        res.writeHead(302, { location: '/mirror/@fission-ai/openspec/latest' });
+        res.writeHead(302, { location: '/mirror/@sagecool/openspec/latest' });
         res.end();
         return;
       }
@@ -319,10 +319,10 @@ describe('getAvailableCliUpdate', () => {
       vi.spyOn(process, 'cwd').mockReturnValue(home);
       delete process.env.npm_config_registry;
 
-      expect(registryUrl()).toBe('https://registry.npmjs.org/@fission-ai/openspec/latest');
+      expect(registryUrl()).toBe('https://registry.npmjs.org/@sagecool/openspec/latest');
 
       process.env.npm_config_registry = 'https://env.example.com';
-      expect(registryUrl()).toBe('https://env.example.com/@fission-ai/openspec/latest');
+      expect(registryUrl()).toBe('https://env.example.com/@sagecool/openspec/latest');
     } finally {
       fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
@@ -335,11 +335,11 @@ describe('getAvailableCliUpdate', () => {
     // must not depend on whatever the machine has configured there.
     for (const bogus of ['not-a-url', 'file:///etc/passwd', 'javascript:alert(1)']) {
       process.env.npm_config_registry = bogus;
-      expect(registryUrl()).toBe('https://registry.npmjs.org/@fission-ai/openspec/latest');
+      expect(registryUrl()).toBe('https://registry.npmjs.org/@sagecool/openspec/latest');
     }
 
     process.env.npm_config_registry = 'https://npm.internal.example.com/';
-    expect(registryUrl()).toBe('https://npm.internal.example.com/@fission-ai/openspec/latest');
+    expect(registryUrl()).toBe('https://npm.internal.example.com/@sagecool/openspec/latest');
   });
 });
 
@@ -394,7 +394,7 @@ describe('offerCliUpgrade', () => {
 
   it('offers only for an npm-owned global install', () => {
     // Anchored on this machine's real npm root so the case is not fictional.
-    const npmGlobal = path.join(npmGlobalRoots()[0], '@fission-ai', 'openspec');
+    const npmGlobal = path.join(npmGlobalRoots()[0], '@sagecool', 'openspec');
     expect(canSelfUpgrade(npmGlobal, PROJECT_ROOT)).toBe(true);
 
     // `npm install -g` is the only command we run, so anything npm does not
@@ -404,7 +404,7 @@ describe('offerCliUpgrade', () => {
       path.join(HOME_ROOT, '.volta', 'tools', 'image', 'packages', 'x', 'node_modules', 'pkg'),
       path.join(HOME_ROOT, '.bun', 'install', 'global', 'node_modules', 'pkg'),
       path.join(HOME_ROOT, '.npm', '_npx', 'a', 'node_modules', 'pkg'),
-      path.join(PROJECT_ROOT, 'node_modules', '@fission-ai', 'openspec'),
+      path.join(PROJECT_ROOT, 'node_modules', '@sagecool', 'openspec'),
       null,
     ];
     for (const dir of notOurs) {
@@ -413,7 +413,7 @@ describe('offerCliUpgrade', () => {
   });
 
   it('asks only where the answer can be given and acted on', () => {
-    const npmGlobal = path.join(npmGlobalRoots()[0], '@fission-ai', 'openspec');
+    const npmGlobal = path.join(npmGlobalRoots()[0], '@sagecool', 'openspec');
     const base = { installDir: npmGlobal, projectPath: PROJECT_ROOT };
 
     expect(shouldOfferUpgrade({ ...base, interactive: true, stdoutIsTty: true })).toBe(true);
@@ -461,8 +461,8 @@ describe('offerCliUpgrade', () => {
     try {
       const isWindows = process.platform === 'win32';
       const installed = isWindows
-        ? path.join(prefix, 'node_modules', '@fission-ai', 'openspec')
-        : path.join(prefix, 'lib', 'node_modules', '@fission-ai', 'openspec');
+        ? path.join(prefix, 'node_modules', '@sagecool', 'openspec')
+        : path.join(prefix, 'lib', 'node_modules', '@sagecool', 'openspec');
       fs.mkdirSync(installed, { recursive: true });
       if (isWindows) {
         // npm writes the .cmd shim beside node_modules; it is what separates
@@ -486,8 +486,8 @@ describe('offerCliUpgrade', () => {
       const portable = fs.mkdtempSync(path.join(os.tmpdir(), 'openspec-portable-'));
       try {
         const copied = isWindows
-          ? path.join(portable, 'node_modules', '@fission-ai', 'openspec')
-          : path.join(portable, 'lib', 'node_modules', '@fission-ai', 'openspec');
+          ? path.join(portable, 'node_modules', '@sagecool', 'openspec')
+          : path.join(portable, 'lib', 'node_modules', '@sagecool', 'openspec');
         fs.mkdirSync(copied, { recursive: true });
         expect(
           isNpmGlobalInstall(copied, [path.join(GLOBAL_ROOT, 'lib', 'node_modules')])
@@ -512,7 +512,7 @@ describe('offerCliUpgrade', () => {
       '22.0.0',
       'lib',
       'node_modules',
-      '@fission-ai',
+      '@sagecool',
       'openspec'
     );
 
@@ -541,7 +541,7 @@ describe('offerCliUpgrade', () => {
   it('recognizes npm global roots without shelling out', () => {
     const roots = [path.join(GLOBAL_ROOT, 'lib', 'node_modules')];
 
-    expect(isNpmGlobalInstall(path.join(roots[0], '@fission-ai', 'openspec'), roots)).toBe(true);
+    expect(isNpmGlobalInstall(path.join(roots[0], '@sagecool', 'openspec'), roots)).toBe(true);
     expect(isNpmGlobalInstall(path.join(GLOBAL_ROOT, 'lib', 'node_modules'), roots)).toBe(false);
     expect(isNpmGlobalInstall(path.join(HOME_ROOT, 'elsewhere', 'pkg'), roots)).toBe(false);
     expect(isNpmGlobalInstall(null, roots)).toBe(false);
@@ -770,32 +770,32 @@ describe('displayCliUpdateNote', () => {
     const output = capture(() => displayCliUpdateNote('9.9.9'));
 
     expect(output).toContain(`v${OPENSPEC_VERSION} → v9.9.9`);
-    expect(output).toContain('npm install -g @fission-ai/openspec@latest');
+    expect(output).toContain('npm install -g @sagecool/openspec@latest');
     expect(output).toContain('Then run "openspec update" again');
     expect(output).toContain(`Running from: ${getInstallDir()}`);
   });
 
   it('picks the upgrade command that matches how the CLI was installed', () => {
-    const globalDir = path.join(GLOBAL_ROOT, 'lib', 'node_modules', '@fission-ai', 'openspec');
+    const globalDir = path.join(GLOBAL_ROOT, 'lib', 'node_modules', '@sagecool', 'openspec');
     const globalLines = buildCliUpdateLines('9.9.9', globalDir, PROJECT_ROOT).join('\n');
-    expect(globalLines).toContain('npm install -g @fission-ai/openspec@latest');
+    expect(globalLines).toContain('npm install -g @sagecool/openspec@latest');
 
     // Hoisted workspace layout: run from a sub-package, dependency at the root.
     const local = buildCliUpdateLines(
       '9.9.9',
-      path.join(PROJECT_ROOT, 'node_modules', '@fission-ai', 'openspec'),
+      path.join(PROJECT_ROOT, 'node_modules', '@sagecool', 'openspec'),
       path.join(PROJECT_ROOT, 'packages', 'app')
     ).join('\n');
     // No npm command: the project's own package manager owns its lockfile.
-    expect(local).toContain('Update the @fission-ai/openspec dependency in this project.');
+    expect(local).toContain('Update the @sagecool/openspec dependency in this project.');
     expect(local).not.toContain('npm install');
 
     const npx = buildCliUpdateLines(
       '9.9.9',
-      path.join(GLOBAL_ROOT, '.npm', '_npx', 'abc123', 'node_modules', '@fission-ai', 'openspec'),
+      path.join(GLOBAL_ROOT, '.npm', '_npx', 'abc123', 'node_modules', '@sagecool', 'openspec'),
       PROJECT_ROOT
     ).join('\n');
-    expect(npx).toContain('npx @fission-ai/openspec@latest update');
+    expect(npx).toContain('npx @sagecool/openspec@latest update');
     expect(npx).not.toContain('npm install -g');
   });
 
@@ -806,7 +806,7 @@ describe('displayCliUpdateNote', () => {
   });
 
   it('recognizes project-local installs from any directory under the project', () => {
-    const local = path.join(PROJECT_ROOT, 'node_modules', '@fission-ai', 'openspec');
+    const local = path.join(PROJECT_ROOT, 'node_modules', '@sagecool', 'openspec');
 
     expect(isProjectLocalInstall(local, PROJECT_ROOT)).toBe(true);
     // Workspace sub-package with a hoisted root node_modules.
@@ -821,7 +821,7 @@ describe('displayCliUpdateNote', () => {
 
     expect(
       isProjectLocalInstall(
-        path.join(GLOBAL_ROOT, 'lib', 'node_modules', '@fission-ai', 'openspec'),
+        path.join(GLOBAL_ROOT, 'lib', 'node_modules', '@sagecool', 'openspec'),
         PROJECT_ROOT
       )
     ).toBe(false);
@@ -853,7 +853,7 @@ describe('displayCliUpdateNote', () => {
       path.join(HOME_ROOT, '.npm', '_npx', 'abc', 'node_modules', 'pkg'),
       PROJECT_ROOT
     );
-    expect(npx).toEqual(['  npx @fission-ai/openspec@latest update']);
+    expect(npx).toEqual(['  npx @sagecool/openspec@latest update']);
 
     // Every other flavor does need the second pass.
     expect(buildUpgradeCommandLines(path.join(GLOBAL_ROOT, 'lib', 'node_modules', 'pkg'), PROJECT_ROOT))
@@ -897,7 +897,7 @@ describe('displayCliUpdateNote', () => {
     ).toBe(true);
     expect(
       isEphemeralRunnerInstall(
-        path.join(GLOBAL_ROOT, 'lib', 'node_modules', '@fission-ai', 'openspec')
+        path.join(GLOBAL_ROOT, 'lib', 'node_modules', '@sagecool', 'openspec')
       )
     ).toBe(false);
     expect(

@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install OpenSpec CLI
-        run: npm install -g @fission-ai/openspec
+        run: npm install -g @sagecool/openspec
 
       - name: Verify OpenSpec CLI
         run: openspec --version
@@ -93,7 +93,7 @@ tools:
 
 ${managedMarker}# OpenSpec Agent
 
-You are a specialized agent for managing OpenSpec workflows. Before using the \`openspec\` CLI, run \`openspec --version\`. If it is unavailable, install it with \`npm install -g @fission-ai/openspec\`.
+You are a specialized agent for managing OpenSpec workflows. Before using the \`openspec\` CLI, run \`openspec --version\`. If it is unavailable, install it with \`npm install -g @sagecool/openspec\`.
 
 ## What is OpenSpec?
 
@@ -160,7 +160,7 @@ function generatePreviousCopilotAgentFileBody(includeManagedMarker = false): str
   let content = generateCopilotAgentFileBody();
   content = replaceRequired(
     content,
-    'You are a specialized agent for managing OpenSpec workflows. Before using the `openspec` CLI, run `openspec --version`. If it is unavailable, install it with `npm install -g @fission-ai/openspec`.',
+    'You are a specialized agent for managing OpenSpec workflows. Before using the `openspec` CLI, run `openspec --version`. If it is unavailable, install it with `npm install -g @sagecool/openspec`.',
     'You are a specialized agent for managing OpenSpec workflows. You have access to the `openspec` CLI through shell commands, pre-installed in the development environment via `copilot-setup-steps.yml`.',
     'previous CLI access sentence'
   );

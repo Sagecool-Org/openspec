@@ -1,4 +1,4 @@
-# @fission-ai/openspec
+# @sagecool/openspec
 
 ## 1.13.0
 

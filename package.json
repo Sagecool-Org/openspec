@@ -1,6 +1,6 @@
 {
-  "name": "@fission-ai/openspec",
-  "version": "1.13.0",
+  "name": "@sagecool/openspec",
+  "version": "1.13.0-board.0",
   "description": "AI-native system for spec-driven development",
   "keywords": [
     "openspec",
@@ -9,10 +9,10 @@
     "ai",
     "development"
   ],
-  "homepage": "https://github.com/Fission-AI/OpenSpec",
+  "homepage": "https://github.com/Sagecool-Org/openspec",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Fission-AI/OpenSpec"
+    "url": "https://github.com/Sagecool-Org/openspec"
   },
   "license": "MIT",
   "author": "OpenSpec Contributors",
