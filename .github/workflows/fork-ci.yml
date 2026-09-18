@@ -1,0 +1,60 @@
+name: Fork CI
+
+# The fork's own CI. Upstream's ci.yml is kept unchanged so that upstream
+# merges stay clean, and is disabled in this repository's Actions settings;
+# this workflow runs the upstream suite (build, type check, lint, tests and
+# the packed-CLI version guard) on every branch. The board store's tests
+# against a local Agora board are added here when the store lands.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upstream-suite:
+    name: Upstream suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20.19.0"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Type check
+        run: pnpm exec tsc --noEmit
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        env:
+          VITEST_MAX_WORKERS: 4
+        run: pnpm test
+
+      - name: Packed CLI reports the fork version
+        run: pnpm run check:pack-version
