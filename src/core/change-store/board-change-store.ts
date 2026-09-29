@@ -73,6 +73,63 @@ export function renderMetadataContent(name: string, metadata: ChangeMetadata, ya
 }
 
 /**
+ * A write whose base is no longer the live version. The caller re-reads the
+ * live tuple, merges, and writes again with its id as the base; `force` skips
+ * the check. This is the only concurrency control on artefacts (design D4).
+ */
+export class StaleArtifactError extends Error {
+  constructor(
+    public readonly change: string,
+    public readonly artifactPath: string,
+    public readonly base: string,
+    public readonly liveId: string | null
+  ) {
+    super(
+      liveId
+        ? `${artifactPath} of change '${change}' has moved on: the live version is ${liveId}, not ${base}. Re-read it and write again with --base ${liveId}, or pass --force.`
+        : `${artifactPath} of change '${change}' no longer has a live version to revise (base ${base}). Write without --base to post it afresh, or pass --force.`
+    );
+    this.name = 'StaleArtifactError';
+  }
+}
+
+/** The `artifact` (and `capability`) keys an artefact path carries on the board. */
+export function artifactKeysFor(relativePath: string): { artifact: string; capability?: string } {
+  const posix = relativePath.split(path.sep).join('/');
+  const spec = posix.match(/^specs\/(.+)\/spec\.md$/);
+  if (spec) return { artifact: 'spec', capability: spec[1] };
+  if (posix === METADATA_FILENAME) return { artifact: 'metadata' };
+  const base = path.posix.basename(posix).replace(/\.[^.]+$/, '');
+  return { artifact: base.toLowerCase().replace(/[^a-z0-9]+/g, '-') };
+}
+
+const SUMMARY_MAX = 200;
+
+/** The one-line summary everyone reads: the change, the artefact, and the markdown's first line. */
+export function artifactSummary(name: string, relativePath: string, markdown: string): string {
+  const { artifact, capability } = artifactKeysFor(relativePath);
+  const label = capability ? `${capability} delta spec` : `${name} ${artifact}`;
+  const firstLine =
+    markdown
+      .split('\n')
+      .map((line) => line.replace(/^#+\s*/, '').trim())
+      .find((line) => line !== '') ?? '';
+  const summary = firstLine ? `${label}: ${firstLine}` : label;
+  return summary.length > SUMMARY_MAX ? `${summary.slice(0, SUMMARY_MAX - 1).trimEnd()}…` : summary;
+}
+
+/** An artefact tuple's body: the summary, a blank line, the markdown exactly as the file would hold it. */
+export function renderArtifactContent(summary: string, markdown: string): string {
+  return `${summary}\n\n${markdown}`;
+}
+
+/** The markdown of an artefact tuple's body, without its summary line. */
+export function artifactTextFromContent(content: string): string {
+  const blank = content.indexOf('\n\n');
+  return blank === -1 ? '' : content.slice(blank + 2);
+}
+
+/**
  * A change stored as tuples on the Agora board named by `.agora.json`. Each
  * artefact is one tuple on `change:<name>` carrying `sdd`, `schema`,
  * `artifact` and `source`; a revision is a new tuple linked `supersedes` to
@@ -128,6 +185,17 @@ export class BoardChangeStore implements ChangeStore {
 
   private async metadataTuple(name: string): Promise<BoardTuple | null> {
     const [newest] = await this.liveArtefacts(name, 'metadata');
+    return newest ?? null;
+  }
+
+  /** The live tuple of one artefact file of a change, found by its `source`, or null. */
+  async liveArtefact(name: string, relativePath: string): Promise<BoardTuple | null> {
+    const result = await this.client.search({
+      subjects: [this.changeSubject(name), `repo:${this.board.repo}`],
+      where: { kind: 'artefact', source: this.sourceOf(name, relativePath) },
+      limit: 10,
+    });
+    const [newest] = [...result.items].sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
     return newest ?? null;
   }
 
@@ -238,17 +306,62 @@ export class BoardChangeStore implements ChangeStore {
     return this.unavailable('check an artefact output');
   }
 
-  async readArtifact(_name: string, _artifactPath: string): Promise<string | null> {
-    return this.unavailable('read an artefact');
+  // ---------------------------------------------------------------------------
+  // Artefacts
+  // ---------------------------------------------------------------------------
+
+  async readArtifact(name: string, artifactPath: string): Promise<string | null> {
+    const tuple = await this.liveArtefact(name, artifactPath);
+    if (!tuple) return null;
+    return artifactKeysFor(artifactPath).artifact === 'metadata'
+      ? metadataTextFromContent(tuple.content)
+      : artifactTextFromContent(tuple.content);
   }
 
+  /**
+   * Posts a version of an artefact. A first write posts a new tuple; a revision
+   * posts a new tuple linked `supersedes` to the live one, so the live id
+   * changes with every version. A caller that read a version passes its id as
+   * `base`; a base that is no longer live is refused naming the live id unless
+   * `force` is set. Metadata written by path goes through `writeMetadata`.
+   */
   async writeArtifact(
-    _name: string,
-    _artifactPath: string,
-    _content: string,
-    _options?: WriteArtifactOptions
+    name: string,
+    artifactPath: string,
+    content: string,
+    options: WriteArtifactOptions = {}
   ): Promise<WriteArtifactResult> {
-    return this.unavailable('write an artefact');
+    const keys = artifactKeysFor(artifactPath);
+    const live = await this.liveArtefact(name, artifactPath);
+    if (options.base !== undefined && !options.force && options.base !== live?.id) {
+      throw new StaleArtifactError(name, artifactPath, options.base, live?.id ?? null);
+    }
+
+    if (keys.artifact === 'metadata') {
+      const source = this.sourceOf(name, METADATA_FILENAME);
+      await this.writeMetadata(name, parseChangeMetadataText(content, source, this.projectRoot));
+      const written = await this.metadataTuple(name);
+      return { id: written?.id ?? '' };
+    }
+
+    const metadata = await this.metadataTuple(name);
+    const schema = metadata ? String(metadata.map?.schema ?? DEFAULT_SCHEMA) : DEFAULT_SCHEMA;
+    const source = this.sourceOf(name, artifactPath);
+    const summary = artifactSummary(name, artifactPath, content);
+    const result = await this.session.post({
+      kind: 'artefact',
+      subjects: [this.changeSubject(name)],
+      content: renderArtifactContent(summary, content),
+      slug: `${name} ${keys.artifact}${keys.capability ? ` ${keys.capability}` : ''}`,
+      tags: ['topic:openspec'],
+      ...(live ? { links: [`supersedes:${live.id}`] } : {}),
+      sdd: 'openspec',
+      schema,
+      artifact: keys.artifact,
+      ...(keys.capability ? { capability: keys.capability } : {}),
+      source,
+    });
+    return { id: result.tuple.id };
   }
 
   async listDeltaSpecs(_name: string): Promise<DiscoveredSpec[]> {

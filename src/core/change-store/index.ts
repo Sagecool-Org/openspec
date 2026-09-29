@@ -11,7 +11,12 @@ export { FileChangeStore, type FileChangeStoreDirectories } from './file-change-
 export {
   BoardChangeStore,
   BoardStoreUnavailableError,
+  StaleArtifactError,
+  artifactKeysFor,
+  artifactSummary,
+  artifactTextFromContent,
   metadataTextFromContent,
+  renderArtifactContent,
   renderMetadataContent,
   type BoardChangeStoreOptions,
 } from './board-change-store.js';
