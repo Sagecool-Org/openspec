@@ -149,9 +149,9 @@ describe('BoardChangeStore listing and outputs', () => {
     }
     running.stub.handle('complete', { id: 'stub-task-1' });
     expect(await store.listTasks('add-search')).toEqual([
-      { ordinal: 1, id: 'stub-task-1', description: '1.1 First', done: true },
-      { ordinal: 2, id: 'stub-task-2', description: '1.2 Second', done: false },
-      { ordinal: 3, id: 'stub-task-3', description: '1.3 Third', done: false },
+      { ordinal: 1, id: 'stub-task-1', description: '1.1 First', done: true, taken: false },
+      { ordinal: 2, id: 'stub-task-2', description: '1.2 Second', done: false, taken: false },
+      { ordinal: 3, id: 'stub-task-3', description: '1.3 Third', done: false, taken: false },
     ]);
   });
 

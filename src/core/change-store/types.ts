@@ -31,6 +31,8 @@ export interface StoredTask {
   id: string;
   description: string;
   done: boolean;
+  /** Held by someone right now. Always false on the file store, which has no leases. */
+  taken?: boolean;
 }
 
 export interface WriteArtifactOptions {
@@ -41,6 +43,12 @@ export interface WriteArtifactOptions {
    */
   base?: string;
   force?: boolean;
+  /**
+   * On a tasks artefact: a checked box in the written text completes the new
+   * task. Only `board import` sets this; a later write never does, so the
+   * board stays the state of record.
+   */
+  importCheckboxes?: boolean;
 }
 
 export interface WriteArtifactResult {

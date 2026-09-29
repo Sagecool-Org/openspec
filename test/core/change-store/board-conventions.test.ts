@@ -124,6 +124,7 @@ describe('board conventions', () => {
       'key-capability',
       'key-task',
       'key-source',
+      'key-task-ids',
       'scheme-change',
       'concept-openspec-on-agora',
     ]);

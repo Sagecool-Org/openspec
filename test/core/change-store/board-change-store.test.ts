@@ -8,6 +8,7 @@ import {
   metadataTextFromContent,
   renderMetadataContent,
 } from '../../../src/core/change-store/board-change-store.js';
+import { conventionNotes } from '../../../src/core/change-store/board-conventions.js';
 import { startStubBoard, type RunningStubBoard } from '../../helpers/stub-board.js';
 
 const noGit = async () => null;
@@ -126,7 +127,7 @@ describe('BoardChangeStore metadata', () => {
     const notes = running.stub.calls.filter(
       (call) => call.verb === 'post' && /^(key|scheme|concept)-/.test(String(call.body.id))
     );
-    expect(notes).toHaveLength(12);
+    expect(notes).toHaveLength(conventionNotes().length);
     const firstPost = running.stub.calls.find((call) => call.verb === 'post');
     expect(firstPost).toMatchObject({ verb: 'post', body: { id: 'key-harness' } });
   });

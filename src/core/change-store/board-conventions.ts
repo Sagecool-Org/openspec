@@ -188,6 +188,12 @@ export function conventionNotes(): ConventionNote[] {
       "source: the repository path a tuple would have had on disk under the tool's file layout, so a pointer stays readable without the board: openspec/changes/<name>/proposal.md for an artefact, openspec/changes/<name>/tasks.md#3 for a task.",
       false
     ),
+    keyNote(
+      'task_ids',
+      'string-list',
+      "task_ids: on a tasks artefact tuple, the ids of the change's task tuples in document order; the newest tasks artefact's list is the change's current task list, so a task it no longer names is dropped whatever its state.",
+      false
+    ),
     {
       id: 'scheme-change',
       shared: false,

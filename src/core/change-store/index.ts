@@ -16,8 +16,10 @@ export {
   artifactSummary,
   artifactTextFromContent,
   metadataTextFromContent,
+  normalizeTaskText,
   renderArtifactContent,
   renderMetadataContent,
+  renderTasksWithState,
   type BoardChangeStoreOptions,
 } from './board-change-store.js';
 export { BOARD_CONFIG_FILENAME, BoardConfigError, findBoardConfig, type BoardConfig } from './board-config.js';

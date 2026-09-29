@@ -19,6 +19,8 @@ import { BoardClient, type BoardTuple } from './board-client.js';
 import type { BoardConfig } from './board-config.js';
 import { BoardSession, type GitRunner } from './board-conventions.js';
 import { matchOutputs } from './generates-glob.js';
+import { generateId } from './ids.js';
+import { parseTaskLines, TASK_LINE_PATTERN } from '../../utils/task-progress.js';
 import type {
   ArchiveChangeOptions,
   ChangeSnapshot,
@@ -130,6 +132,31 @@ export function renderArtifactContent(summary: string, markdown: string): string
 export function artifactTextFromContent(content: string): string {
   const blank = content.indexOf('\n\n');
   return blank === -1 ? '' : content.slice(blank + 2);
+}
+
+/** One task line's text, as compared across revisions: trimmed, inner whitespace collapsed. */
+export function normalizeTaskText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * The tasks markdown with every checklist box drawn from the tuples' state,
+ * by ordinal, so what a reader sees is the board's record and never the text
+ * a writer last sent.
+ */
+export function renderTasksWithState(markdown: string, tasks: StoredTask[]): string {
+  let ordinal = 0;
+  return markdown
+    .split('\n')
+    .map((line) => {
+      const match = line.match(TASK_LINE_PATTERN);
+      if (!match) return line;
+      ordinal += 1;
+      const task = tasks[ordinal - 1];
+      if (!task) return line;
+      return line.replace(/\[[\sxX]\]/, task.done ? '[x]' : '[ ]');
+    })
+    .join('\n');
 }
 
 /**
@@ -363,9 +390,8 @@ export class BoardChangeStore implements ChangeStore {
 
   /**
    * Writes every live artefact as the file it would be, for read-only commands
-   * that still think in files and for `board export`. The tasks artefact is
-   * written as its text; rendering checkboxes from task tuples arrives with
-   * the task operations.
+   * that still think in files and for `board export`. The tasks artefact's
+   * checkboxes are drawn from the task tuples' state.
    */
   async exportChange(name: string, targetDir: string): Promise<void> {
     const tuples = await this.allLiveArtefacts(name);
@@ -379,10 +405,14 @@ export class BoardChangeStore implements ChangeStore {
       const file = path.join(targetDir, ...relative.split('/'));
       FileSystemUtils.assertPathWithin(targetDir, file);
       await fs.promises.mkdir(path.dirname(file), { recursive: true });
-      const text =
-        tuple.map?.artifact === 'metadata'
-          ? metadataTextFromContent(tuple.content)
-          : artifactTextFromContent(tuple.content);
+      let text: string;
+      if (tuple.map?.artifact === 'metadata') {
+        text = metadataTextFromContent(tuple.content);
+      } else if (tuple.map?.artifact === 'tasks') {
+        text = renderTasksWithState(artifactTextFromContent(tuple.content), await this.tasksOf(name, tuple));
+      } else {
+        text = artifactTextFromContent(tuple.content);
+      }
       await fs.promises.writeFile(file, text, 'utf-8');
     }
   }
@@ -394,9 +424,10 @@ export class BoardChangeStore implements ChangeStore {
   async readArtifact(name: string, artifactPath: string): Promise<string | null> {
     const tuple = await this.liveArtefact(name, artifactPath);
     if (!tuple) return null;
-    return artifactKeysFor(artifactPath).artifact === 'metadata'
-      ? metadataTextFromContent(tuple.content)
-      : artifactTextFromContent(tuple.content);
+    const { artifact } = artifactKeysFor(artifactPath);
+    if (artifact === 'metadata') return metadataTextFromContent(tuple.content);
+    const markdown = artifactTextFromContent(tuple.content);
+    return artifact === 'tasks' ? renderTasksWithState(markdown, await this.tasksOf(name, tuple)) : markdown;
   }
 
   /**
@@ -427,6 +458,9 @@ export class BoardChangeStore implements ChangeStore {
 
     const metadata = await this.metadataTuple(name);
     const schema = metadata ? String(metadata.map?.schema ?? DEFAULT_SCHEMA) : DEFAULT_SCHEMA;
+    if (keys.artifact === 'tasks') {
+      return this.writeTasks(name, artifactPath, content, live, schema, options);
+    }
     const source = this.sourceOf(name, artifactPath);
     const summary = artifactSummary(name, artifactPath, content);
     const result = await this.session.post({
@@ -469,38 +503,189 @@ export class BoardChangeStore implements ChangeStore {
     return tuples.some((tuple) => tuple.map?.artifact !== 'metadata');
   }
 
-  /**
-   * The change's task tuples by ordinal, completed ones included: a completed
-   * task is retired, so the search asks for retired tuples too.
-   */
-  async listTasks(name: string): Promise<StoredTask[]> {
+  // ---------------------------------------------------------------------------
+  // Tasks
+  // ---------------------------------------------------------------------------
+
+  /** Every task tuple of the change, completed ones included, by id. A completed task is retired, so the search asks for retired tuples too. */
+  private async taskTuplesById(name: string): Promise<Map<string, BoardTuple>> {
     const result = await this.client.search({
       subjects: [this.changeSubject(name), `repo:${this.board.repo}`],
       where: { kind: 'task' },
       retired: true,
-      limit: 1000,
+      limit: 2000,
     });
-    return result.items
-      .map((tuple) => ({
-        ordinal: Number(tuple.map?.task),
-        id: tuple.id,
-        description: tuple.content.split('\n')[0]?.trim() ?? '',
-        done: tuple.state === 'retired',
-      }))
-      .filter((task) => Number.isFinite(task.ordinal))
-      .sort((a, b) => a.ordinal - b.ordinal);
+    return new Map(result.items.map((tuple) => [tuple.id, tuple]));
   }
 
-  async takeTask(_name: string, _ordinal: number): Promise<StoredTask> {
-    return this.unavailable('take a task');
+  private toStoredTask(tuple: BoardTuple, ordinal: number): StoredTask {
+    return {
+      ordinal,
+      id: tuple.id,
+      description: tuple.content.split('\n')[0]?.trim() ?? '',
+      done: tuple.state === 'retired',
+      taken: tuple.state === 'taken',
+    };
   }
 
-  async completeTask(_name: string, _ordinal: number): Promise<StoredTask> {
-    return this.unavailable('complete a task');
+  /**
+   * The tasks of the change as its tasks artefact lists them: the artefact
+   * tuple's `task_ids`, in order, resolved to task tuples. A tasks artefact
+   * without `task_ids` (posted by another adapter) falls back to every task
+   * tuple of the change ordered by its `task` ordinal.
+   */
+  private async tasksOf(name: string, tasksArtefact: BoardTuple | null): Promise<StoredTask[]> {
+    const byId = await this.taskTuplesById(name);
+    const ids = tasksArtefact?.map?.task_ids;
+    if (Array.isArray(ids)) {
+      return ids.map((id, index) => {
+        const tuple = byId.get(String(id));
+        return tuple
+          ? this.toStoredTask(tuple, index + 1)
+          : {
+              ordinal: index + 1,
+              id: String(id),
+              description: `(task ${id} is no longer on the board)`,
+              done: false,
+              taken: false,
+            };
+      });
+    }
+    return [...byId.values()]
+      .filter((tuple) => Number.isFinite(Number(tuple.map?.task)))
+      .sort((a, b) => Number(a.map?.task) - Number(b.map?.task))
+      .map((tuple, index) => this.toStoredTask(tuple, index + 1));
   }
 
-  async releaseTask(_name: string, _ordinal: number): Promise<StoredTask> {
-    return this.unavailable('release a task');
+  async listTasks(name: string): Promise<StoredTask[]> {
+    const [tasksArtefact] = await this.liveArtefacts(name, 'tasks');
+    return this.tasksOf(name, tasksArtefact ?? null);
+  }
+
+  private async taskAt(name: string, ordinal: number): Promise<StoredTask> {
+    const task = (await this.listTasks(name)).find((candidate) => candidate.ordinal === ordinal);
+    if (!task) {
+      throw new Error(`Task ${ordinal} not found in change '${name}'`);
+    }
+    return task;
+  }
+
+  async takeTask(name: string, ordinal: number): Promise<StoredTask> {
+    const task = await this.taskAt(name, ordinal);
+    await this.client.take(task.id);
+    return { ...task, taken: true };
+  }
+
+  async completeTask(name: string, ordinal: number): Promise<StoredTask> {
+    const task = await this.taskAt(name, ordinal);
+    if (!task.done) await this.client.complete(task.id);
+    return { ...task, done: true, taken: false };
+  }
+
+  async releaseTask(name: string, ordinal: number): Promise<StoredTask> {
+    const task = await this.taskAt(name, ordinal);
+    await this.client.release(task.id);
+    return { ...task, taken: false };
+  }
+
+  /**
+   * Writes the tasks artefact and reconciles the change's task tuples with
+   * its checklist (design D5). An item whose text matches an existing task
+   * keeps that task's id and state; an unmatched item at the ordinal of an
+   * unmatched task is an edit, whose new tuple supersedes the old one and
+   * inherits its state; tasks left unmatched are archived; items left
+   * unmatched become new open tasks. A checked box in the written text
+   * completes a new task only on import, never on a later write: the board
+   * stays the state of record. Ids are minted here so the artefact can name
+   * its tasks and the tasks can name their artefact in one pass.
+   */
+  private async writeTasks(
+    name: string,
+    artifactPath: string,
+    content: string,
+    live: BoardTuple | null,
+    schema: string,
+    options: WriteArtifactOptions
+  ): Promise<WriteArtifactResult> {
+    const existing = await this.tasksOf(name, live);
+    const items = parseTaskLines(content);
+
+    const unmatchedExisting = new Map(existing.map((task) => [task.ordinal, task]));
+    const plan: Array<{
+      id: string;
+      kept: boolean;
+      supersedes?: string;
+      text: string;
+      inheritDone: boolean;
+      importDone: boolean;
+    }> = [];
+    const unmatchedItems: Array<{ ordinal: number; text: string; done: boolean }> = [];
+
+    items.forEach((item, index) => {
+      const wanted = normalizeTaskText(item.description);
+      const match = [...unmatchedExisting.values()].find((task) => normalizeTaskText(task.description) === wanted);
+      if (match) {
+        unmatchedExisting.delete(match.ordinal);
+        plan[index] = { id: match.id, kept: true, text: item.description, inheritDone: false, importDone: false };
+      } else {
+        unmatchedItems.push({ ordinal: index + 1, text: item.description, done: item.done });
+      }
+    });
+
+    for (const item of unmatchedItems) {
+      const edited = unmatchedExisting.get(item.ordinal);
+      if (edited) unmatchedExisting.delete(item.ordinal);
+      plan[item.ordinal - 1] = {
+        id: generateId('task', `${name} task ${item.ordinal}`),
+        kept: false,
+        ...(edited ? { supersedes: edited.id } : {}),
+        text: item.text,
+        inheritDone: edited?.done ?? false,
+        importDone: options.importCheckboxes === true && item.done,
+      };
+    }
+
+    const artefactId = generateId('artefact', `${name} tasks`);
+    const source = this.sourceOf(name, artifactPath);
+    await this.session.post({
+      id: artefactId,
+      kind: 'artefact',
+      subjects: [this.changeSubject(name)],
+      content: renderArtifactContent(artifactSummary(name, artifactPath, content), content),
+      tags: ['topic:openspec'],
+      ...(live ? { links: [`supersedes:${live.id}`] } : {}),
+      sdd: 'openspec',
+      schema,
+      artifact: 'tasks',
+      source,
+      task_ids: plan.map((entry) => entry.id),
+    });
+
+    for (const [index, entry] of plan.entries()) {
+      if (entry.kept) continue;
+      const ordinal = index + 1;
+      await this.session.post({
+        id: entry.id,
+        kind: 'task',
+        subjects: [this.changeSubject(name)],
+        content: entry.text,
+        tags: ['topic:openspec'],
+        links: [`derives-from:${artefactId}`, ...(entry.supersedes ? [`supersedes:${entry.supersedes}`] : [])],
+        sdd: 'openspec',
+        schema,
+        task: ordinal,
+        source: `${source}#${ordinal}`,
+      });
+      if (entry.inheritDone || entry.importDone) {
+        await this.client.complete(entry.id);
+      }
+    }
+
+    for (const dropped of unmatchedExisting.values()) {
+      if (!dropped.done) await this.client.archive(dropped.id);
+    }
+
+    return { id: artefactId };
   }
 
   async archiveChange(_name: string, _options?: ArchiveChangeOptions): Promise<void> {
