@@ -1,5 +1,11 @@
 # @sagecool/openspec
 
+## 1.13.0-board.1
+
+### Minor Changes
+
+- A change can live on the Agora board the repository declares in `.agora.json` (Sagecool-Org/openspec, board-backed-openspec). The change store is the seam: a root with `.agora.json` gets the board store, every other root the unchanged file store. On the board each artefact is one versioned tuple and each checklist item a task tuple; `openspec change read|write`, `openspec task take|complete|release`, `openspec board import|export|refresh` are the new commands; status, list, validate, show, the instructions and archive work on both stores; a declared board that does not answer fails every change command closed.
+
 ## 1.13.0
 
 ### Minor Changes
