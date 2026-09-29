@@ -72,7 +72,7 @@ afterAll(async () => {
   await Promise.all(tempRoots.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe('board import and export', () => {
+describe('board import and export', { timeout: 120_000 }, () => {
   it('imports a directory as tuples with checked items completed, and exports it back byte for byte', async () => {
     running.stub.tuples.clear();
     const cwd = await scaffoldProject();

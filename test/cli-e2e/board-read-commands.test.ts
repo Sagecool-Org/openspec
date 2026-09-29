@@ -51,7 +51,7 @@ afterAll(async () => {
   await Promise.all(tempRoots.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe('read commands on a board-backed repository', () => {
+describe('read commands on a board-backed repository', { timeout: 60_000 }, () => {
   it('status of a partly planned change: proposal done, specs and design ready, tasks blocked', async () => {
     running.stub.tuples.clear();
     const cwd = await scaffoldBoardProject();

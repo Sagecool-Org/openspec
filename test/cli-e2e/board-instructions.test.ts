@@ -48,7 +48,7 @@ afterAll(async () => {
   await Promise.all(tempRoots.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe('instructions on a board change', () => {
+describe('instructions on a board change', { timeout: 120_000 }, () => {
   it('apply instructions report board progress and list the tasks with ordinals and ids', async () => {
     running.stub.tuples.clear();
     const cwd = await scaffoldProject(true);

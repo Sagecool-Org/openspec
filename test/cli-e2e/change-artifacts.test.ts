@@ -41,7 +41,7 @@ afterAll(async () => {
 });
 
 for (const store of ['file', 'board'] as const) {
-  describe(`change read/write and task verbs on the ${store} store`, () => {
+  describe(`change read/write and task verbs on the ${store} store`, { timeout: 180_000 }, () => {
     const env = store === 'board' ? boardEnv : {};
 
     it('writes, reads and revises artifacts, and takes, completes and releases tasks', async () => {

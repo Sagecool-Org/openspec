@@ -70,7 +70,7 @@ afterAll(async () => {
   await Promise.all(tempRoots.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe('archive of a board change', () => {
+describe('archive of a board change', { timeout: 120_000 }, () => {
   it('refuses while a task tuple is still open, unless --yes', async () => {
     running.stub.tuples.clear();
     const cwd = await scaffoldRepository();

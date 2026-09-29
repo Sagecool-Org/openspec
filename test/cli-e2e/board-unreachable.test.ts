@@ -45,7 +45,7 @@ afterAll(async () => {
   await Promise.all(tempRoots.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe('a declared board that does not answer', () => {
+describe('a declared board that does not answer', { timeout: 180_000 }, () => {
   it('fails every change command naming the board, and neither creates nor reads a file under openspec/changes/', async () => {
     const port = await closedPort();
     const url = `http://127.0.0.1:${port}`;

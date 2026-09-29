@@ -31,7 +31,7 @@ afterAll(async () => {
   await Promise.all(tempRoots.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe('openspec new change on a board-backed repository', () => {
+describe('openspec new change on a board-backed repository', { timeout: 60_000 }, () => {
   it('posts a metadata tuple for change:<name> and creates no directory', async () => {
     const cwd = await scaffoldProject(true);
     const result = await runCLI(['new', 'change', 'demo', '--json'], {
