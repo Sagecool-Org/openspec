@@ -542,6 +542,7 @@ export class BoardChangeStore implements ChangeStore {
       description: tuple.content.split('\n')[0]?.trim() ?? '',
       done: tuple.state === 'retired',
       taken: tuple.state === 'taken',
+      ...(typeof tuple.expires === 'string' ? { expires: tuple.expires } : {}),
     };
   }
 
@@ -641,7 +642,18 @@ export class BoardChangeStore implements ChangeStore {
     items.forEach((item, index) => {
       const wanted = normalizeTaskText(item.description);
       const match = [...unmatchedExisting.values()].find((task) => normalizeTaskText(task.description) === wanted);
-      if (match) {
+      if (match && options.refreshBefore && match.expires && match.expires < options.refreshBefore) {
+        // Text unchanged but the tuple is about to expire: a superseding copy inherits its state.
+        unmatchedExisting.delete(match.ordinal);
+        plan[index] = {
+          id: generateId('task', `${name} task ${index + 1}`),
+          kept: false,
+          supersedes: match.id,
+          text: item.description,
+          inheritDone: match.done,
+          importDone: false,
+        };
+      } else if (match) {
         unmatchedExisting.delete(match.ordinal);
         plan[index] = { id: match.id, kept: true, text: item.description, inheritDone: false, importDone: false };
       } else {

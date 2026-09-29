@@ -25,6 +25,8 @@ export interface StubTuple {
   map: Record<string, unknown>;
   state: StubState;
   created: string;
+  /** When the board would retire the tuple: 90 days for artefacts and notes, 30 for the rest, as the kinds are seeded. */
+  expires: string;
   lease?: string;
   completed?: boolean;
   archived?: boolean;
@@ -93,7 +95,13 @@ export class StubBoard {
       map,
       state: 'open',
       created: this.now(),
+      expires: this.expiry(String(body.kind)),
     };
+  }
+
+  private expiry(kind: string): string {
+    const days = kind === 'artefact' || kind === 'note' || kind === 'decision' ? 90 : 30;
+    return new Date(Date.UTC(2026, 8, 29 + days, 0, 0, this.tick)).toISOString();
   }
 
   handle(verb: string, body: Record<string, unknown>): { status: number; body: unknown } {
@@ -224,6 +232,7 @@ export class StubBoard {
       map: tuple.map,
       state: tuple.state === 'open' && tuple.lease ? 'taken' : tuple.state,
       created: tuple.created,
+      expires: tuple.expires,
       author_name: 'stub',
       run: 'stub-run',
       ...(tuple.lease ? { lease: { owner: tuple.lease } } : {}),

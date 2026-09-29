@@ -33,6 +33,8 @@ export interface StoredTask {
   done: boolean;
   /** Held by someone right now. Always false on the file store, which has no leases. */
   taken?: boolean;
+  /** When the board would retire the task's tuple (RFC 3339). Absent on the file store. */
+  expires?: string;
 }
 
 export interface WriteArtifactOptions {
@@ -49,6 +51,12 @@ export interface WriteArtifactOptions {
    * board stays the state of record.
    */
   importCheckboxes?: boolean;
+  /**
+   * On a tasks artefact: a task whose tuple expires before this instant (RFC
+   * 3339) is re-posted as a superseding copy inheriting its state even when its
+   * text is unchanged. Set by `board refresh` only.
+   */
+  refreshBefore?: string;
 }
 
 export interface ArtifactVersion {

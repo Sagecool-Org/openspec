@@ -80,9 +80,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
   {
     name: 'view',
     description: 'Display an interactive dashboard of specs and changes',
-    flags: [
-      COMMON_FLAGS.store,
-    ],
+    flags: [COMMON_FLAGS.store],
   },
   {
     name: 'validate',
@@ -248,10 +246,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
   {
     name: 'schemas',
     description: 'List available workflow schemas with descriptions',
-    flags: [
-      COMMON_FLAGS.json,
-      COMMON_FLAGS.store,
-    ],
+    flags: [COMMON_FLAGS.json, COMMON_FLAGS.store],
   },
   {
     name: 'new',
@@ -287,8 +282,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
   },
   {
     name: 'store',
-    description:
-      'Create and manage stores - standalone OpenSpec repos you register on this machine',
+    description: 'Create and manage stores - standalone OpenSpec repos you register on this machine',
     flags: [],
     subcommands: [
       {
@@ -342,9 +336,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         description: 'Forget a local store registration without deleting files',
         acceptsPositional: true,
         positionals: [{ name: 'id' }],
-        flags: [
-          COMMON_FLAGS.json,
-        ],
+        flags: [COMMON_FLAGS.json],
       },
       {
         name: 'remove',
@@ -362,25 +354,19 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       {
         name: 'list',
         description: 'List registered stores',
-        flags: [
-          COMMON_FLAGS.json,
-        ],
+        flags: [COMMON_FLAGS.json],
       },
       {
         name: 'ls',
         description: 'List registered stores',
-        flags: [
-          COMMON_FLAGS.json,
-        ],
+        flags: [COMMON_FLAGS.json],
       },
       {
         name: 'doctor',
         description: 'Check local store registration and metadata',
         acceptsPositional: true,
         positionals: [{ name: 'id', optional: true }],
-        flags: [
-          COMMON_FLAGS.json,
-        ],
+        flags: [COMMON_FLAGS.json],
       },
     ],
   },
@@ -405,10 +391,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
   {
     name: 'doctor',
     description: 'Report relationship health for the resolved OpenSpec root',
-    flags: [
-      COMMON_FLAGS.json,
-      COMMON_FLAGS.store,
-    ],
+    flags: [COMMON_FLAGS.json, COMMON_FLAGS.store],
   },
   {
     name: 'workset',
@@ -423,8 +406,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         flags: [
           {
             name: 'member',
-            description:
-              'Member folder as <path> or <name>=<path>; repeatable, first is the primary',
+            description: 'Member folder as <path> or <name>=<path>; repeatable, first is the primary',
             takesValue: true,
             completionType: 'path',
           },
@@ -448,8 +430,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       },
       {
         name: 'open',
-        description:
-          'Open a saved workset in your tool (editor window or agent session)',
+        description: 'Open a saved workset in your tool (editor window or agent session)',
         acceptsPositional: true,
         positionals: [{ name: 'name' }],
         flags: [
@@ -533,21 +514,14 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         acceptsPositional: true,
         positionalType: 'change-id',
         positionals: [{ name: 'change-name', type: 'change-id', optional: true }],
-        flags: [
-          COMMON_FLAGS.strict,
-          COMMON_FLAGS.jsonValidation,
-          COMMON_FLAGS.noInteractive,
-        ],
+        flags: [COMMON_FLAGS.strict, COMMON_FLAGS.jsonValidation, COMMON_FLAGS.noInteractive],
       },
       {
         name: 'read',
         description: 'Print the current content of one artifact of a change',
         acceptsPositional: true,
         positionalType: 'change-id',
-        positionals: [
-          { name: 'change', type: 'change-id' },
-          { name: 'artifact' },
-        ],
+        positionals: [{ name: 'change', type: 'change-id' }, { name: 'artifact' }],
         flags: [
           {
             name: 'capability',
@@ -563,10 +537,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         description: 'Write one artifact of a change from a file or stdin',
         acceptsPositional: true,
         positionalType: 'change-id',
-        positionals: [
-          { name: 'change', type: 'change-id' },
-          { name: 'artifact' },
-        ],
+        positionals: [{ name: 'change', type: 'change-id' }, { name: 'artifact' }],
         flags: [
           {
             name: 'capability',
@@ -593,6 +564,25 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         ],
       },
     ],
+  },
+  {
+    name: 'board',
+    description: 'Move a change between openspec/changes/ and the board the repository declares',
+    flags: [],
+    subcommands: (
+      [
+        ['import', 'Post a change directory to the board as tuples (checked tasks completed) and print their ids'],
+        ['export', 'Write the current version of every artefact of a board change back to openspec/changes/'],
+        ['refresh', 'Re-post the tuples of a board change that expire within seven days'],
+      ] as const
+    ).map(([name, description]) => ({
+      name,
+      description,
+      acceptsPositional: true,
+      positionalType: 'change-id' as const,
+      positionals: [{ name: 'change', type: 'change-id' as const }],
+      flags: [COMMON_FLAGS.json, COMMON_FLAGS.store],
+    })),
   },
   {
     name: 'task',
@@ -659,11 +649,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
         acceptsPositional: true,
         positionalType: 'spec-id',
         positionals: [{ name: 'spec-id', type: 'spec-id', optional: true }],
-        flags: [
-          COMMON_FLAGS.strict,
-          COMMON_FLAGS.jsonValidation,
-          COMMON_FLAGS.noInteractive,
-        ],
+        flags: [COMMON_FLAGS.strict, COMMON_FLAGS.jsonValidation, COMMON_FLAGS.noInteractive],
       },
     ],
   },
@@ -729,9 +715,7 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
       {
         name: 'list',
         description: 'Show all current settings',
-        flags: [
-          COMMON_FLAGS.json,
-        ],
+        flags: [COMMON_FLAGS.json],
       },
       {
         name: 'get',

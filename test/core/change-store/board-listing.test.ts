@@ -148,11 +148,13 @@ describe('BoardChangeStore listing and outputs', () => {
       });
     }
     running.stub.handle('complete', { id: 'stub-task-1' });
-    expect(await store.listTasks('add-search')).toEqual([
+    const listed = await store.listTasks('add-search');
+    expect(listed.map(({ expires, ...task }) => task)).toEqual([
       { ordinal: 1, id: 'stub-task-1', description: '1.1 First', done: true, taken: false },
       { ordinal: 2, id: 'stub-task-2', description: '1.2 Second', done: false, taken: false },
       { ordinal: 3, id: 'stub-task-3', description: '1.3 Third', done: false, taken: false },
     ]);
+    expect(listed.every((task) => typeof task.expires === 'string')).toBe(true);
   });
 
   it('loads the artifact-graph context from a snapshot: proposal done, specs and design ready, tasks blocked', async () => {

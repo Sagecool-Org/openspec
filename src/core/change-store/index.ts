@@ -55,3 +55,13 @@ export {
   type RepositoryContext,
 } from './board-conventions.js';
 export { archiveBoardChange, type BoardArchiveResult } from './board-archive.js';
+export {
+  REFRESH_WINDOW_MS,
+  exportChangeFromBoard,
+  importChangeToBoard,
+  refreshChange,
+  type ExportResult,
+  type ImportResult,
+  type RefreshResult,
+  type RefreshedTuple,
+} from './board-migration.js';
