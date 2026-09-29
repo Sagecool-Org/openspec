@@ -20,7 +20,7 @@ import { resolveSchemaForChange } from './change-metadata.js';
  * Deliberately unanchored at the end: `.` does not match `\r`, so writing the
  * description group as `(.*)$` would reject every line of a CRLF tasks.md.
  */
-const TASK_LINE_PATTERN = /^\s*[-*]\s*\[([\sxX])\]\s*(.*)/;
+export const TASK_LINE_PATTERN = /^\s*[-*]\s*\[([\sxX])\]\s*(.*)/;
 
 export interface ParsedTask {
   /** Checkbox state: `[x]`/`[X]` is done, anything else is not. */

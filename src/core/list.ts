@@ -41,7 +41,7 @@ async function readChangeDirectoryEntries(changesDir: string): Promise<Dirent[]>
  * Get the most recent modification time of any file in a directory (recursive).
  * Falls back to the directory's own mtime if no files are found.
  */
-async function getLastModified(dirPath: string): Promise<Date> {
+export async function getLastModified(dirPath: string): Promise<Date> {
   let latest: Date | null = null;
 
   async function walk(dir: string): Promise<void> {

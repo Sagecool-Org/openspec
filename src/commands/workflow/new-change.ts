@@ -9,7 +9,8 @@
 
 import ora from 'ora';
 import path from 'path';
-import { createChange, validateChangeName } from '../../utils/change-utils.js';
+import { validateChangeName } from '../../utils/change-utils.js';
+import { FileChangeStore } from '../../core/change-store/index.js';
 import { formatChangeLocation } from '../../core/planning-home.js';
 import {
   resolveRootForCommand,
@@ -120,10 +121,9 @@ export async function newChangeCommand(name: string | undefined, options: NewCha
       spinner.start(`Creating change '${name}' with schema '${resolvedSchema}'...`);
     }
 
-    const result = await createChange(projectRoot, name, {
+    const result = await FileChangeStore.forRoot(root).createChange(name, {
       schema: options.schema,
       defaultSchema: root.defaultSchema,
-      changesDir: root.changesDir,
       metadata: {
         ...(options.goal ? { goal: options.goal } : {}),
       },

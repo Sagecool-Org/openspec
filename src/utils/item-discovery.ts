@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { discoverSpecFiles } from './spec-discovery.js';
+import { FileChangeStore } from '../core/change-store/file-change-store.js';
 
 /**
  * Returns the ids of active changes: every directory under openspec/changes/
@@ -14,13 +15,9 @@ import { discoverSpecFiles } from './spec-discovery.js';
  * all (#1161).
  */
 export async function getActiveChangeIds(root: string = process.cwd()): Promise<string[]> {
-  const changesPath = path.join(root, 'openspec', 'changes');
   try {
-    const entries = await fs.readdir(changesPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory() && entry.name !== 'archive' && !entry.name.startsWith('.'))
-      .map((entry) => entry.name)
-      .sort();
+    const changes = await new FileChangeStore({ projectRoot: root }).listChanges();
+    return changes.sort();
   } catch {
     return [];
   }
