@@ -15,7 +15,7 @@ export { loadSchema, parseSchema, SchemaValidationError } from './schema.js';
 export { ArtifactGraph } from './graph.js';
 
 // State detection
-export { detectCompleted } from './state.js';
+export { detectCompleted, detectCompletedWith } from './state.js';
 export {
   artifactOutputExists,
   isGlobPattern,

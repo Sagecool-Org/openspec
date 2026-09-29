@@ -377,6 +377,7 @@ program
       await listCommand.execute(root.path, mode, {
         sort,
         json: options?.json,
+        changeStore: root.store,
         ...(options?.json ? { root: toRootOutput(root) } : {}),
       });
     } catch (error) {

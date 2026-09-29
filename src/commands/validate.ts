@@ -11,7 +11,7 @@ import {
 } from '../core/root-selection.js';
 import { isInteractive, resolveNoInteractive } from '../utils/interactive.js';
 import { getSpecIds } from '../utils/item-discovery.js';
-import { getAvailableChanges } from './workflow/shared.js';
+import { withChangeOnDisk } from '../core/change-store/context.js';
 import { nearestMatches } from '../utils/match.js';
 import { promises as fs } from 'fs';
 import { getTaskProgressDetailForChange, type SchemaGlobCache } from '../utils/task-progress.js';
@@ -165,7 +165,7 @@ export class ValidateCommand {
    * resolve (#1182). Sorted to preserve the prior `getActiveChangeIds` ordering.
    */
   private async listChangeIds(root: ResolvedOpenSpecRoot): Promise<string[]> {
-    const ids = await getAvailableChanges(root.path, root.changesDir);
+    const ids = await root.store.listChanges();
     return ids.sort();
   }
 
@@ -273,12 +273,13 @@ export class ValidateCommand {
   private async validateByType(root: ResolvedOpenSpecRoot, type: ItemType, id: string, opts: { strict: boolean; json: boolean }): Promise<void> {
     const validator = new Validator(opts.strict);
     if (type === 'change') {
-      const changeDir = path.join(root.changesDir, id);
       const start = Date.now();
-      const report = await validator.validateChangeDeltaSpecs(changeDir, {
-        mainSpecsDir: root.specsDir,
-        projectRoot: root.path,
-      });
+      const report = await withChangeOnDisk(root.store, id, (onDisk) =>
+        validator.validateChangeDeltaSpecs(path.join(onDisk.changesDir, id), {
+          mainSpecsDir: root.specsDir,
+          projectRoot: onDisk.path,
+        })
+      );
       const durationMs = Date.now() - start;
       this.printReport('change', id, report, durationMs, opts.json, root);
       // Non-zero exit if invalid (keeps enriched output test semantics)
@@ -391,11 +392,12 @@ export class ValidateCommand {
     for (const id of changeIds) {
       queue.push(async () => {
         const start = Date.now();
-        const changeDir = path.join(root.changesDir, id);
-        const report = await validator.validateChangeDeltaSpecs(changeDir, {
-          mainSpecsDir: root.specsDir,
-          projectRoot: root.path,
-        });
+        const report = await withChangeOnDisk(root.store, id, (onDisk) =>
+          validator.validateChangeDeltaSpecs(path.join(onDisk.changesDir, id), {
+            mainSpecsDir: root.specsDir,
+            projectRoot: onDisk.path,
+          })
+        );
         const durationMs = Date.now() - start;
         return { id, type: 'change' as const, valid: report.valid, issues: report.issues, durationMs };
       });

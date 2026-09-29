@@ -6,6 +6,7 @@ import ora from 'ora';
 import { ValidateCommand, projectValidationFindings } from '../../src/commands/validate.js';
 import { resolveRootForCommand, toRootOutput, type ResolvedOpenSpecRoot } from '../../src/core/root-selection.js';
 import { Validator } from '../../src/core/validation/validator.js';
+import { FileChangeStore } from '../../src/core/change-store/index.js';
 
 vi.mock('../../src/core/root-selection.js', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../src/core/root-selection.js')>(),
@@ -68,6 +69,7 @@ describe('validate findings reports', () => {
       archiveDir: path.join(directory, 'openspec', 'changes', 'archive'),
       defaultSchema: 'spec-driven',
       source: 'nearest',
+      store: new FileChangeStore({ projectRoot: directory }),
     };
     await fs.mkdir(root.changesDir, { recursive: true });
     await fs.mkdir(root.specsDir, { recursive: true });

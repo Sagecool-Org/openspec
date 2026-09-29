@@ -17,6 +17,7 @@ import { getLastModified } from '../list.js';
 import type { ResolvedOpenSpecRoot } from '../root-selection.js';
 import type {
   ArchiveChangeOptions,
+  ChangeSnapshot,
   ChangeStore,
   MetadataMarkerName,
   StoredTask,
@@ -243,6 +244,31 @@ export class FileChangeStore implements ChangeStore {
       ...options,
       ...(this.storeId !== undefined ? { store: this.storeId } : {}),
     });
+  }
+
+  async snapshot(name: string): Promise<ChangeSnapshot> {
+    const changeDir = this.changeDir(name);
+    if (!fs.existsSync(changeDir)) return { exists: false, metadata: null, outputs: [] };
+    const outputs: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) await walk(full);
+        else outputs.push(path.relative(changeDir, full).split(path.sep).join('/'));
+      }
+    };
+    await walk(changeDir);
+    return { exists: true, metadata: await this.readMetadata(name), outputs: outputs.sort() };
+  }
+
+  async exportChange(name: string, targetDir: string): Promise<void> {
+    const changeDir = this.changeDir(name);
+    if (!fs.existsSync(changeDir)) {
+      throw new Error(`Change '${name}' not found at ${changeDir}`);
+    }
+    await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
+    await fs.promises.cp(changeDir, targetDir, { recursive: true });
   }
 
   async changeLastModified(name: string): Promise<Date | null> {

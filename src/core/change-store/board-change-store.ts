@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import type { ChangeMetadata } from '../change-metadata/schema.js';
 import {
@@ -17,8 +18,10 @@ import { isSpecsArtifactPath } from '../artifact-graph/outputs.js';
 import { BoardClient, type BoardTuple } from './board-client.js';
 import type { BoardConfig } from './board-config.js';
 import { BoardSession, type GitRunner } from './board-conventions.js';
+import { matchOutputs } from './generates-glob.js';
 import type {
   ArchiveChangeOptions,
+  ChangeSnapshot,
   ChangeStore,
   MetadataMarkerName,
   StoredTask,
@@ -183,6 +186,24 @@ export class BoardChangeStore implements ChangeStore {
     return [...result.items].sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
   }
 
+  /** Every live artefact tuple of a change, newest first. */
+  async allLiveArtefacts(name: string): Promise<BoardTuple[]> {
+    const result = await this.client.search({
+      subjects: [this.changeSubject(name), `repo:${this.board.repo}`],
+      where: { kind: 'artefact' },
+      limit: 1000,
+    });
+    return [...result.items].sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
+  }
+
+  /** The path an artefact tuple would have under `openspec/changes/<name>/`, from its `source`. */
+  relativePathOf(name: string, tuple: BoardTuple): string | null {
+    const source = tuple.map?.source;
+    if (typeof source !== 'string') return null;
+    const prefix = `openspec/changes/${name}/`;
+    return source.startsWith(prefix) ? source.slice(prefix.length) : null;
+  }
+
   private async metadataTuple(name: string): Promise<BoardTuple | null> {
     const [newest] = await this.liveArtefacts(name, 'metadata');
     return newest ?? null;
@@ -203,8 +224,20 @@ export class BoardChangeStore implements ChangeStore {
   // Changes and metadata
   // ---------------------------------------------------------------------------
 
+  /** Every change with a live metadata tuple in this repository on the board, sorted. */
   async listChanges(): Promise<string[]> {
-    return this.unavailable('list changes');
+    const result = await this.client.search({
+      subjects: [`repo:${this.board.repo}`],
+      where: { kind: 'artefact', artifact: 'metadata' },
+      limit: 1000,
+    });
+    const names = new Set<string>();
+    for (const tuple of result.items) {
+      for (const subject of tuple.subjects) {
+        if (subject.startsWith('change:')) names.add(subject.slice('change:'.length));
+      }
+    }
+    return [...names].sort();
   }
 
   async changeExists(name: string): Promise<boolean> {
@@ -298,12 +331,60 @@ export class BoardChangeStore implements ChangeStore {
   // Not yet on the board
   // ---------------------------------------------------------------------------
 
-  async resolveOutputs(_name: string, _generates: string): Promise<string[]> {
-    return this.unavailable('resolve artefact outputs');
+  // ---------------------------------------------------------------------------
+  // What the change holds
+  // ---------------------------------------------------------------------------
+
+  async snapshot(name: string): Promise<ChangeSnapshot> {
+    const tuples = await this.allLiveArtefacts(name);
+    const metadataTuple = tuples.find((tuple) => tuple.map?.artifact === 'metadata') ?? null;
+    const outputs = tuples
+      .map((tuple) => this.relativePathOf(name, tuple))
+      .filter((relative): relative is string => relative !== null)
+      .sort();
+    const metadata = metadataTuple
+      ? parseChangeMetadataText(
+          metadataTextFromContent(metadataTuple.content),
+          this.sourceOf(name, METADATA_FILENAME),
+          this.projectRoot
+        )
+      : null;
+    return { exists: tuples.length > 0, metadata, outputs: [...new Set(outputs)] };
   }
 
-  async outputExists(_name: string, _generates: string): Promise<boolean> {
-    return this.unavailable('check an artefact output');
+  async resolveOutputs(name: string, generates: string): Promise<string[]> {
+    const { outputs } = await this.snapshot(name);
+    return matchOutputs(outputs, generates).map((relative) => path.join(this.changesDir, name, ...relative.split('/')));
+  }
+
+  async outputExists(name: string, generates: string): Promise<boolean> {
+    return (await this.resolveOutputs(name, generates)).length > 0;
+  }
+
+  /**
+   * Writes every live artefact as the file it would be, for read-only commands
+   * that still think in files and for `board export`. The tasks artefact is
+   * written as its text; rendering checkboxes from task tuples arrives with
+   * the task operations.
+   */
+  async exportChange(name: string, targetDir: string): Promise<void> {
+    const tuples = await this.allLiveArtefacts(name);
+    if (tuples.length === 0) {
+      throw new Error(`Change '${name}' is not on the board at ${this.board.url}`);
+    }
+    await fs.promises.mkdir(targetDir, { recursive: true });
+    for (const tuple of tuples) {
+      const relative = this.relativePathOf(name, tuple);
+      if (!relative) continue;
+      const file = path.join(targetDir, ...relative.split('/'));
+      FileSystemUtils.assertPathWithin(targetDir, file);
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
+      const text =
+        tuple.map?.artifact === 'metadata'
+          ? metadataTextFromContent(tuple.content)
+          : artifactTextFromContent(tuple.content);
+      await fs.promises.writeFile(file, text, 'utf-8');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -364,20 +445,50 @@ export class BoardChangeStore implements ChangeStore {
     return { id: result.tuple.id };
   }
 
-  async listDeltaSpecs(_name: string): Promise<DiscoveredSpec[]> {
-    return this.unavailable('list delta specs');
+  /** One entry per live delta spec tuple: the capability and the path the spec would have. */
+  async listDeltaSpecs(name: string): Promise<DiscoveredSpec[]> {
+    const tuples = await this.liveArtefacts(name, 'spec');
+    return tuples
+      .map((tuple) => ({
+        id: String(tuple.map?.capability ?? ''),
+        specFile: path.join(this.changesDir, name, 'specs', String(tuple.map?.capability ?? ''), 'spec.md'),
+      }))
+      .filter((spec) => spec.id !== '')
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
-  async listUnreadDeltas(_name: string): Promise<DiscoveredSpec[]> {
-    return this.unavailable('list unread delta specs');
+  async listUnreadDeltas(name: string): Promise<DiscoveredSpec[]> {
+    const deltas = await this.listDeltaSpecs(name);
+    const specsDir = path.join(this.projectRoot, 'openspec', 'specs');
+    return deltas.filter((delta) => !fs.existsSync(path.join(specsDir, delta.id, 'spec.md')));
   }
 
-  async hasAnyContent(_name: string): Promise<boolean> {
-    return this.unavailable('check for content');
+  /** True when the change holds anything besides its metadata, as the file store counts anything but dot files. */
+  async hasAnyContent(name: string): Promise<boolean> {
+    const tuples = await this.allLiveArtefacts(name);
+    return tuples.some((tuple) => tuple.map?.artifact !== 'metadata');
   }
 
-  async listTasks(_name: string): Promise<StoredTask[]> {
-    return this.unavailable('list tasks');
+  /**
+   * The change's task tuples by ordinal, completed ones included: a completed
+   * task is retired, so the search asks for retired tuples too.
+   */
+  async listTasks(name: string): Promise<StoredTask[]> {
+    const result = await this.client.search({
+      subjects: [this.changeSubject(name), `repo:${this.board.repo}`],
+      where: { kind: 'task' },
+      retired: true,
+      limit: 1000,
+    });
+    return result.items
+      .map((tuple) => ({
+        ordinal: Number(tuple.map?.task),
+        id: tuple.id,
+        description: tuple.content.split('\n')[0]?.trim() ?? '',
+        done: tuple.state === 'retired',
+      }))
+      .filter((task) => Number.isFinite(task.ordinal))
+      .sort((a, b) => a.ordinal - b.ordinal);
   }
 
   async takeTask(_name: string, _ordinal: number): Promise<StoredTask> {
@@ -396,7 +507,10 @@ export class BoardChangeStore implements ChangeStore {
     return this.unavailable('archive a change');
   }
 
-  async changeLastModified(_name: string): Promise<Date | null> {
-    return this.unavailable('read when a change last changed');
+  async changeLastModified(name: string): Promise<Date | null> {
+    const [newest] = await this.allLiveArtefacts(name);
+    if (!newest?.created) return null;
+    const date = new Date(String(newest.created));
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 }

@@ -7,6 +7,7 @@ import {
   BoardChangeStore,
   BoardConfigError,
   BoardStoreUnavailableError,
+  BoardUnreachableError,
   FileChangeStore,
   findBoardConfig,
 } from '../../../src/core/change-store/index.js';
@@ -71,10 +72,12 @@ describe('change store selection by the resolved root', () => {
 
   it('fails a board operation naming the board instead of falling back to files', async () => {
     fs.writeFileSync(path.join(root, '.agora.json'), JSON.stringify({ repo: 'sagecool', url: 'http://127.0.0.1:1' }));
+    process.env.AGORA_TOKEN = 'test-token';
     const resolved = await resolveOpenSpecRoot({ startPath: root });
-    await expect(resolved.store.listChanges()).rejects.toBeInstanceOf(BoardStoreUnavailableError);
-    await expect(resolved.store.listChanges()).rejects.toThrow('http://127.0.0.1:1');
-    await expect(resolved.store.listChanges()).rejects.toThrow('"sagecool"');
+    await expect(resolved.store.listChanges()).rejects.toBeInstanceOf(BoardUnreachableError);
+    await expect(resolved.store.listChanges()).rejects.toThrow('board at http://127.0.0.1:1 unreachable');
+    await expect(resolved.store.archiveChange('demo')).rejects.toBeInstanceOf(BoardStoreUnavailableError);
+    await expect(resolved.store.archiveChange('demo')).rejects.toThrow('"sagecool"');
   });
 
   it('refuses a declared board it cannot use rather than reading files', async () => {

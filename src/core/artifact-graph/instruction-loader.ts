@@ -2,7 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getSchemaDir, resolveSchema, listSchemasWithInfo } from './resolver.js';
 import { ArtifactGraph } from './graph.js';
-import { detectCompleted } from './state.js';
+import { detectCompleted, detectCompletedWith } from './state.js';
+import { matchOutputs } from '../change-store/generates-glob.js';
+import type { ChangeSnapshot } from '../change-store/types.js';
 import {
   isSpecsArtifactPath,
   resolveArtifactOutputPath,
@@ -59,6 +61,8 @@ export interface ChangeContext {
   planningHome?: PlanningHome;
   /** Parsed change metadata, when present */
   metadata?: ChangeMetadata;
+  /** The store's view of the change, when the context was loaded from one rather than from files */
+  snapshot?: ChangeSnapshot;
   /**
    * Artifact IDs counted as complete only because the change declares
    * skip_specs, not because their files exist. Kept separate so status can
@@ -72,6 +76,12 @@ export interface LoadChangeContextOptions {
   planningHome?: PlanningHome;
   /** Pre-read project config; suppresses schema resolution's fallback config read. */
   projectConfig?: ProjectConfig | null;
+  /**
+   * The change as its store reports it. When given, nothing under `changeDir`
+   * is read: metadata and artefact existence come from here, and `changeDir`
+   * is only the path the JSON contract names.
+   */
+  snapshot?: ChangeSnapshot;
 }
 
 /**
@@ -268,11 +278,11 @@ export function loadChangeContext(
   schemaName?: string,
   options: LoadChangeContextOptions = {}
 ): ChangeContext {
-  const changeDir = FileSystemUtils.canonicalizeExistingPath(
-    options.changeDir ?? path.join(projectRoot, 'openspec', 'changes', changeName)
-  );
+  const snapshot = options.snapshot;
+  const nominalChangeDir = options.changeDir ?? path.join(projectRoot, 'openspec', 'changes', changeName);
+  const changeDir = snapshot ? nominalChangeDir : FileSystemUtils.canonicalizeExistingPath(nominalChangeDir);
 
-  const metadata = readChangeMetadata(changeDir, projectRoot) ?? undefined;
+  const metadata = (snapshot ? snapshot.metadata : readChangeMetadata(changeDir, projectRoot)) ?? undefined;
   const resolvedSchemaName = resolveSchemaForChange(changeDir, schemaName, projectRoot, {
     metadata: metadata ?? null,
     projectConfig: options.projectConfig,
@@ -280,7 +290,9 @@ export function loadChangeContext(
 
   const schema = resolveSchema(resolvedSchemaName, projectRoot);
   const graph = ArtifactGraph.fromSchema(schema);
-  const completed = detectCompleted(graph, changeDir);
+  const completed = snapshot
+    ? detectCompletedWith(graph, (generates) => matchOutputs(snapshot.outputs, generates).length > 0)
+    : detectCompleted(graph, changeDir);
 
   // A change that declares skip_specs has no spec deltas by design, so
   // artifacts generating into specs/ count as complete; otherwise the graph
@@ -306,7 +318,22 @@ export function loadChangeContext(
     ...(options.planningHome ? { planningHome: options.planningHome } : {}),
     ...(metadata ? { metadata } : {}),
     ...(skippedArtifacts.size > 0 ? { skippedArtifacts } : {}),
+    ...(snapshot ? { snapshot } : {}),
   };
+}
+
+/**
+ * The outputs an artefact has for this change: from the store's snapshot when
+ * the context came from one, else the files under the change directory. Both
+ * are absolute-shaped paths under `changeDir`, as the JSON contract names them.
+ */
+export function existingOutputPaths(context: ChangeContext, generates: string): string[] {
+  if (context.snapshot) {
+    return matchOutputs(context.snapshot.outputs, generates).map((relative) =>
+      path.join(context.changeDir, ...relative.split('/'))
+    );
+  }
+  return resolveArtifactOutputs(context.changeDir, generates);
 }
 
 /**
@@ -392,7 +419,7 @@ export function generateInstructions(
     planningHome: summarizePlanningHome(context.planningHome),
     outputPath: artifact.generates,
     resolvedOutputPath: resolveArtifactOutputPath(context.changeDir, artifact.generates),
-    existingOutputPaths: resolveArtifactOutputs(context.changeDir, artifact.generates),
+    existingOutputPaths: existingOutputPaths(context, artifact.generates),
     description: artifact.description,
     instruction: artifact.instruction,
     context: configContext,
@@ -470,7 +497,7 @@ export function formatChangeStatus(
     artifactPaths[artifact.id] = {
       outputPath: artifact.generates,
       resolvedOutputPath: resolveArtifactOutputPath(context.changeDir, artifact.generates),
-      existingOutputPaths: resolveArtifactOutputs(context.changeDir, artifact.generates),
+      existingOutputPaths: existingOutputPaths(context, artifact.generates),
     };
 
     if (context.skippedArtifacts?.has(artifact.id)) {

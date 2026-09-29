@@ -15,16 +15,15 @@ import {
   isStoreSelectedRoot,
 } from '../../core/root-selection.js';
 import {
-  loadChangeContext,
   formatChangeStatus,
   type ChangeStatus,
 } from '../../core/artifact-graph/index.js';
+import { loadChangeContextFor } from '../../core/change-store/context.js';
 import { asStatus } from '../shared-output.js';
 import type { StoreDiagnostic } from '../../core/store/errors.js';
 import {
-  validateChangeExists,
+  validateChangeExistsIn,
   validateSchemaExists,
-  getAvailableChanges,
   getStatusIndicator,
   getStatusColor,
 } from './shared.js';
@@ -84,9 +83,9 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
 
     // Single definition of "load one change's status" so the batch and
     // single-change payloads can never drift apart.
-    const loadStatus = (changeName: string): ChangeStatus =>
+    const loadStatus = async (changeName: string): Promise<ChangeStatus> =>
       formatChangeStatus(
-        loadChangeContext(projectRoot, changeName, options.schema, {
+        await loadChangeContextFor(root.store, changeName, options.schema, {
           changeDir: getChangeDir(planningHome, changeName),
           planningHome,
         }),
@@ -102,7 +101,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
         validateSchemaExists(options.schema, projectRoot);
       }
 
-      const available = await getAvailableChanges(projectRoot, root.changesDir);
+      const available = await root.store.listChanges();
       if (available.length === 0) {
         spinner?.stop();
         if (options.json) {
@@ -126,7 +125,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
         const entries: BatchStatusEntry[] = [];
         for (const changeName of available.sort((a, b) => a.localeCompare(b))) {
           try {
-            entries.push(loadStatus(changeName));
+            entries.push(await loadStatus(changeName));
           } catch (error) {
             // One malformed change must not blank the sweep; carry its
             // diagnostic in place and keep going.
@@ -173,12 +172,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
       );
     }
 
-    const changeName = await validateChangeExists(
-      options.change,
-      projectRoot,
-      root.changesDir,
-      { newChangeHint }
-    );
+    const changeName = await validateChangeExistsIn(root.store, options.change, { newChangeHint });
 
     // Validate schema if explicitly provided
     if (options.schema) {
@@ -186,7 +180,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
     }
 
     // loadChangeContext will auto-detect schema from metadata if not provided
-    const status = loadStatus(changeName);
+    const status = await loadStatus(changeName);
 
     spinner?.stop();
 

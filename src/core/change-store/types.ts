@@ -50,6 +50,18 @@ export interface WriteArtifactResult {
 
 export type ArchiveChangeOptions = Omit<ArchiveOptions, 'store' | 'storePath'>;
 
+/**
+ * What a change holds, read once: its validated metadata (null when it has
+ * none) and the relative paths of the artefacts that exist, in the upstream
+ * layout (`proposal.md`, `specs/<capability>/spec.md`). The synchronous
+ * artifact-graph code works from this where it would otherwise stat files.
+ */
+export interface ChangeSnapshot {
+  exists: boolean;
+  metadata: ChangeMetadata | null;
+  outputs: string[];
+}
+
 export interface ChangeStore {
   readonly kind: ChangeStoreKind;
   /** The repository root: `openspec/specs/` and `openspec/config.yaml` live under it on every store. */
@@ -104,4 +116,13 @@ export interface ChangeStore {
   archiveChange(name: string, options?: ArchiveChangeOptions): Promise<void>;
   /** When the change last changed, or null when it has no content to date. */
   changeLastModified(name: string): Promise<Date | null>;
+
+  /** The change's metadata and existing artefacts, read once. */
+  snapshot(name: string): Promise<ChangeSnapshot>;
+  /**
+   * Writes the current version of every artefact of the change into
+   * `targetDir` in the upstream layout: how a read-only file-shaped command
+   * sees a change from any store, and how `board export` returns one to files.
+   */
+  exportChange(name: string, targetDir: string): Promise<void>;
 }

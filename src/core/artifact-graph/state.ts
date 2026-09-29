@@ -12,19 +12,26 @@ import { artifactOutputExists } from './outputs.js';
  * @returns Set of artifact IDs whose generated files exist
  */
 export function detectCompleted(graph: ArtifactGraph, changeDir: string): CompletedSet {
-  const completed = new Set<string>();
-
   // Handle missing change directory gracefully
   if (!fs.existsSync(changeDir)) {
-    return completed;
+    return new Set<string>();
   }
 
+  return detectCompletedWith(graph, (generates) => isArtifactComplete(generates, changeDir));
+}
+
+/**
+ * The same detection given an existence predicate instead of a directory: a
+ * store whose artefacts are not files answers whether a `generates` pattern
+ * names anything the change holds.
+ */
+export function detectCompletedWith(graph: ArtifactGraph, exists: (generates: string) => boolean): CompletedSet {
+  const completed = new Set<string>();
   for (const artifact of graph.getAllArtifacts()) {
-    if (isArtifactComplete(artifact.generates, changeDir)) {
+    if (exists(artifact.generates)) {
       completed.add(artifact.id);
     }
   }
-
   return completed;
 }
 

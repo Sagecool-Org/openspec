@@ -8,7 +8,7 @@
 import chalk from 'chalk';
 import path from 'path';
 import { getSchemaDir, listSchemas } from '../../core/artifact-graph/index.js';
-import { FileChangeStore } from '../../core/change-store/index.js';
+import { FileChangeStore, type ChangeStore } from '../../core/change-store/index.js';
 import type { ReferenceIndexEntry } from '../../core/references.js';
 import { isRootSelectionError } from '../../core/root-selection.js';
 
@@ -186,12 +186,24 @@ export async function validateChangeExists(
   changesDir = path.join(projectRoot, 'openspec', 'changes'),
   hints: { newChangeHint?: string } = {}
 ): Promise<string> {
+  return validateChangeExistsIn(new FileChangeStore({ projectRoot, changesDir }), changeName, hints);
+}
+
+/**
+ * The same check against any change store: a root-aware caller passes
+ * `root.store`, so a board-backed change resolves without a directory.
+ */
+export async function validateChangeExistsIn(
+  store: ChangeStore,
+  changeName: string | undefined,
+  hints: { newChangeHint?: string } = {}
+): Promise<string> {
   // Hints must stay pasteable: callers with a selected store pass a
   // store-carrying hint so following it lands in the same root.
   const newChangeHint = hints.newChangeHint ?? 'openspec new change <name>';
 
   if (!changeName) {
-    const available = await getAvailableChanges(projectRoot, changesDir);
+    const available = await store.listChanges();
     if (available.length === 0) {
       throw new Error(`No changes found. Create one with: ${newChangeHint}`);
     }
@@ -206,11 +218,10 @@ export async function validateChangeExists(
     throw new Error(`Invalid change name '${changeName}': ${lookupError}`);
   }
 
-  // Check directory existence directly
-  const exists = await new FileChangeStore({ projectRoot, changesDir }).changeExists(changeName);
+  const exists = await store.changeExists(changeName);
 
   if (!exists) {
-    const available = await getAvailableChanges(projectRoot, changesDir);
+    const available = await store.listChanges();
     if (available.length === 0) {
       throw new Error(
         `Change '${changeName}' not found. No changes exist. Create one with: ${newChangeHint}`

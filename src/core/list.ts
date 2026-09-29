@@ -4,6 +4,7 @@ import { getTaskProgressForChange, formatTaskStatus } from '../utils/task-progre
 import { readFileSync, type Dirent } from 'fs';
 import { MarkdownParser } from './parsers/markdown-parser.js';
 import type { RootOutput } from './root-selection.js';
+import type { ChangeStore } from './change-store/types.js';
 import { discoverSpecFiles } from '../utils/spec-discovery.js';
 
 interface ChangeInfo {
@@ -17,6 +18,8 @@ interface ListOptions {
   sort?: 'recent' | 'name';
   json?: boolean;
   root?: RootOutput;
+  /** The resolved root's change store; when given, changes are listed through it rather than by directory. */
+  changeStore?: ChangeStore;
 }
 
 function isMissingPathError(error: unknown): boolean {
@@ -96,16 +99,22 @@ function formatRelativeTime(date: Date): string {
 
 export class ListCommand {
   async execute(targetPath: string = '.', mode: 'changes' | 'specs' = 'changes', options: ListOptions = {}): Promise<void> {
-    const { sort = 'recent', json = false, root } = options;
+    const { sort = 'recent', json = false, root, changeStore } = options;
 
     if (mode === 'changes') {
       const changesDir = path.join(targetPath, 'openspec', 'changes');
 
-      // Get all directories in changes (excluding archive)
-      const entries = await readChangeDirectoryEntries(changesDir);
-      const changeDirs = entries
-        .filter(entry => entry.isDirectory() && entry.name !== 'archive')
-        .map(entry => entry.name);
+      // Through the store when the caller resolved a root; else the
+      // directories under changes/ (excluding archive), as before.
+      let changeDirs: string[];
+      if (changeStore) {
+        changeDirs = await changeStore.listChanges();
+      } else {
+        const entries = await readChangeDirectoryEntries(changesDir);
+        changeDirs = entries
+          .filter(entry => entry.isDirectory() && entry.name !== 'archive')
+          .map(entry => entry.name);
+      }
 
       if (changeDirs.length === 0) {
         if (json) {
@@ -120,9 +129,16 @@ export class ListCommand {
       const changes: ChangeInfo[] = [];
 
       for (const changeDir of changeDirs) {
-        const progress = await getTaskProgressForChange(changesDir, changeDir, targetPath);
-        const changePath = path.join(changesDir, changeDir);
-        const lastModified = await getLastModified(changePath);
+        let progress: { total: number; completed: number };
+        let lastModified: Date;
+        if (changeStore && changeStore.kind !== 'file') {
+          const tasks = await changeStore.listTasks(changeDir);
+          progress = { total: tasks.length, completed: tasks.filter((task) => task.done).length };
+          lastModified = (await changeStore.changeLastModified(changeDir)) ?? new Date(0);
+        } else {
+          progress = await getTaskProgressForChange(changesDir, changeDir, targetPath);
+          lastModified = await getLastModified(path.join(changesDir, changeDir));
+        }
         changes.push({
           name: changeDir,
           completedTasks: progress.completed,

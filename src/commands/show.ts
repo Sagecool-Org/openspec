@@ -1,5 +1,5 @@
 import { isInteractive } from '../utils/interactive.js';
-import { getActiveChangeIds, getSpecIds } from '../utils/item-discovery.js';
+import { getSpecIds } from '../utils/item-discovery.js';
 import {
   resolveRootForCommand,
   toRootOutput,
@@ -9,6 +9,7 @@ import {
   isStoreSelectedRoot,
 } from '../core/root-selection.js';
 import { ChangeCommand } from './change.js';
+import { withChangeOnDisk } from '../core/change-store/context.js';
 import { SpecCommand } from './spec.js';
 import { nearestMatches } from '../utils/match.js';
 
@@ -78,15 +79,14 @@ export class ShowCommand {
   ): Promise<void> {
     const { select } = await import('@inquirer/prompts');
     if (type === 'change') {
-      const changes = await getActiveChangeIds(root.path);
+      const changes = await root.store.listChanges();
       if (changes.length === 0) {
         console.error('No changes found.');
         process.exitCode = 1;
         return;
       }
       const picked = await select<string>({ message: 'Pick a change', choices: changes.map(id => ({ name: id, value: id })) });
-      const cmd = new ChangeCommand(root.path);
-      await cmd.show(picked, this.delegateOptions(root, options) as any);
+      await this.showChange(root, picked, options);
       return;
     }
 
@@ -112,13 +112,13 @@ export class ShowCommand {
     let changes: string[] = [];
     let specs: string[] = [];
     if (params.typeOverride === 'change') {
-      changes = await getActiveChangeIds(root.path);
+      changes = await root.store.listChanges();
       isChange = changes.includes(itemName);
     } else if (params.typeOverride === 'spec') {
       specs = await getSpecIds(root.path);
       isSpec = specs.includes(itemName);
     } else {
-      [changes, specs] = await Promise.all([getActiveChangeIds(root.path), getSpecIds(root.path)]);
+      [changes, specs] = await Promise.all([root.store.listChanges(), getSpecIds(root.path)]);
       isChange = changes.includes(itemName);
       isSpec = specs.includes(itemName);
     }
@@ -179,12 +179,23 @@ export class ShowCommand {
 
     this.warnIrrelevantFlags(resolvedType, params.options);
     if (resolvedType === 'change') {
-      const cmd = new ChangeCommand(root.path);
-      await cmd.show(itemName, this.delegateOptions(root, params.options) as any);
+      await this.showChange(root, itemName, params.options);
       return;
     }
     const cmd = new SpecCommand(root.path);
     await cmd.show(itemName, this.delegateOptions(root, params.options) as any);
+  }
+
+  /**
+   * The change command thinks in files, so a change from any other store is
+   * shown from a temporary root it is exported into; the file store is shown
+   * in place.
+   */
+  private async showChange(root: ResolvedOpenSpecRoot, changeName: string, options: ShowExecuteOptions): Promise<void> {
+    await withChangeOnDisk(root.store, changeName, async (onDisk) => {
+      const cmd = new ChangeCommand(onDisk.path);
+      await cmd.show(changeName, this.delegateOptions(root, options) as any);
+    });
   }
 
   private printNonInteractiveHint(root: ResolvedOpenSpecRoot): void {
