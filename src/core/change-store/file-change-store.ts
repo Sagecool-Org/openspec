@@ -17,6 +17,7 @@ import { getLastModified } from '../list.js';
 import type { ResolvedOpenSpecRoot } from '../root-selection.js';
 import type {
   ArchiveChangeOptions,
+  ArtifactVersion,
   ChangeSnapshot,
   ChangeStore,
   MetadataMarkerName,
@@ -133,6 +134,11 @@ export class FileChangeStore implements ChangeStore {
       if (isErrno(error, 'ENOENT')) return null;
       throw error;
     }
+  }
+
+  async readArtifactVersion(name: string, artifactPath: string): Promise<ArtifactVersion | null> {
+    const content = await this.readArtifact(name, artifactPath);
+    return content === null ? null : { id: this.artifactFile(name, artifactPath), content };
   }
 
   async writeArtifact(

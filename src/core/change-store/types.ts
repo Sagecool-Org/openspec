@@ -51,6 +51,12 @@ export interface WriteArtifactOptions {
   importCheckboxes?: boolean;
 }
 
+export interface ArtifactVersion {
+  /** The version's identity: the file path, or the tuple id. */
+  id: string;
+  content: string;
+}
+
 export interface WriteArtifactResult {
   /** The written version's identity: the file path, or the tuple id. */
   id: string;
@@ -100,6 +106,12 @@ export interface ChangeStore {
 
   /** The current content of an artefact, or null when it does not exist yet. */
   readArtifact(name: string, artifactPath: string): Promise<string | null>;
+  /**
+   * The current content of an artefact with the identity of that version: the
+   * `base` a caller passes back to `writeArtifact`. On the file store the
+   * identity is the path; on the board it is the live tuple's id.
+   */
+  readArtifactVersion(name: string, artifactPath: string): Promise<ArtifactVersion | null>;
   writeArtifact(
     name: string,
     artifactPath: string,

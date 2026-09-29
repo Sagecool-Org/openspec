@@ -1,5 +1,7 @@
 export type {
   ArchiveChangeOptions,
+  ArtifactVersion,
+  ChangeSnapshot,
   ChangeStore,
   ChangeStoreKind,
   MetadataMarkerName,

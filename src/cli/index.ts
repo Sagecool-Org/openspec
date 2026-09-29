@@ -23,6 +23,7 @@ import { ViewCommand } from '../core/view.js';
 import { resolveRootForCommand, toRootOutput } from '../core/root-selection.js';
 import { registerSpecCommand } from '../commands/spec.js';
 import { ChangeCommand } from '../commands/change.js';
+import { changeReadCommand, changeWriteCommand, taskCommand, type TaskVerb } from '../commands/change-artifacts.js';
 import { ValidateCommand } from '../commands/validate.js';
 import { ShowCommand } from '../commands/show.js';
 import { CompletionCommand } from '../commands/completion.js';
@@ -417,10 +418,48 @@ const changeCmd = program
   .command('change')
   .description('Manage OpenSpec change proposals');
 
-// Deprecation notice for noun-based commands
-changeCmd.hook('preAction', () => {
+// Deprecation notice for noun-based commands. `change read` and `change
+// write` are the store's own surface, not the deprecated noun forms.
+const STORE_SURFACE_SUBCOMMANDS = new Set(['read', 'write']);
+changeCmd.hook('preAction', (_thisCommand, actionCommand) => {
+  if (STORE_SURFACE_SUBCOMMANDS.has(actionCommand.name())) return;
   console.error('Warning: The "openspec change ..." commands are deprecated. Prefer verb-first commands (e.g., "openspec list", "openspec validate --changes").');
 });
+
+changeCmd
+  .command('read <change> <artifact>')
+  .description('Print the current content of one artifact of a change (proposal, design, tasks, spec --capability <name>, metadata, or a path)')
+  .option('--capability <name>', 'Which capability a per-capability artifact (such as specs) refers to')
+  .option('--json', 'Output as JSON, with the version id to pass back as --base')
+  .option('--store <id>', STORE_OPTION_DESCRIPTION)
+  .addOption(hiddenStorePathOption())
+  .action(async (change: string, artifact: string, options: { capability?: string; json?: boolean; store?: string; storePath?: string }) => {
+    try {
+      await changeReadCommand(change, artifact, options);
+    } catch (error) {
+      failWithError(error, { enabled: options.json, payload: { change }, fallbackCode: 'change_read_error' });
+      process.exitCode = 1;
+    }
+  });
+
+changeCmd
+  .command('write <change> <artifact>')
+  .description('Write one artifact of a change from a file or stdin; a revision names the version it read with --base')
+  .option('--capability <name>', 'Which capability a per-capability artifact (such as specs) refers to')
+  .option('--file <path>', 'The content to write; "-" reads stdin')
+  .option('--base <id>', 'The version this write revises; refused when it is no longer current')
+  .option('--force', 'Write even when --base is no longer current')
+  .option('--json', 'Output as JSON')
+  .option('--store <id>', STORE_OPTION_DESCRIPTION)
+  .addOption(hiddenStorePathOption())
+  .action(async (change: string, artifact: string, options: { capability?: string; file?: string; base?: string; force?: boolean; json?: boolean; store?: string; storePath?: string }) => {
+    try {
+      await changeWriteCommand(change, artifact, options);
+    } catch (error) {
+      failWithError(error, { enabled: options.json, payload: { change }, fallbackCode: 'change_write_error' });
+      process.exitCode = 1;
+    }
+  });
 
 changeCmd
   .command('show [change-name]')
@@ -529,6 +568,31 @@ program
       process.exit(1);
     }
   });
+
+// Tasks: take, complete and release by ordinal, on whatever store the root uses
+const taskCmd = program.command('task').description('Take, complete or release a task of a change by its ordinal');
+for (const verb of ['take', 'complete', 'release'] as TaskVerb[]) {
+  taskCmd
+    .command(`${verb} <change> <ordinal>`)
+    .description(
+      verb === 'take'
+        ? 'Reserve a task before working on it'
+        : verb === 'complete'
+          ? 'Mark a task done at the commit that finishes it'
+          : 'Give a reserved task back'
+    )
+    .option('--json', 'Output as JSON')
+    .option('--store <id>', STORE_OPTION_DESCRIPTION)
+    .addOption(hiddenStorePathOption())
+    .action(async (change: string, ordinal: string, options: { json?: boolean; store?: string; storePath?: string }) => {
+      try {
+        await taskCommand(verb, change, ordinal, options);
+      } catch (error) {
+        failWithError(error, { enabled: options.json, payload: { change }, fallbackCode: 'task_error' });
+        process.exitCode = 1;
+      }
+    });
+}
 
 // Top-level show command
 program

@@ -166,6 +166,8 @@ describe('command completion registry', () => {
     walk(program, '');
     expect(seen.sort()).toEqual([
       'archive',
+      'change read',
+      'change write',
       'context',
       'doctor',
       'instructions',
@@ -174,6 +176,9 @@ describe('command completion registry', () => {
       'schemas',
       'show',
       'status',
+      'task complete',
+      'task release',
+      'task take',
       'validate',
       'view',
     ]);

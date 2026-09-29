@@ -23,6 +23,7 @@ import { generateId } from './ids.js';
 import { parseTaskLines, TASK_LINE_PATTERN } from '../../utils/task-progress.js';
 import type {
   ArchiveChangeOptions,
+  ArtifactVersion,
   ChangeSnapshot,
   ChangeStore,
   MetadataMarkerName,
@@ -422,12 +423,19 @@ export class BoardChangeStore implements ChangeStore {
   // ---------------------------------------------------------------------------
 
   async readArtifact(name: string, artifactPath: string): Promise<string | null> {
+    return (await this.readArtifactVersion(name, artifactPath))?.content ?? null;
+  }
+
+  async readArtifactVersion(name: string, artifactPath: string): Promise<ArtifactVersion | null> {
     const tuple = await this.liveArtefact(name, artifactPath);
     if (!tuple) return null;
     const { artifact } = artifactKeysFor(artifactPath);
-    if (artifact === 'metadata') return metadataTextFromContent(tuple.content);
+    if (artifact === 'metadata') return { id: tuple.id, content: metadataTextFromContent(tuple.content) };
     const markdown = artifactTextFromContent(tuple.content);
-    return artifact === 'tasks' ? renderTasksWithState(markdown, await this.tasksOf(name, tuple)) : markdown;
+    return {
+      id: tuple.id,
+      content: artifact === 'tasks' ? renderTasksWithState(markdown, await this.tasksOf(name, tuple)) : markdown,
+    };
   }
 
   /**

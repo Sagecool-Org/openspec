@@ -539,7 +539,78 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
           COMMON_FLAGS.noInteractive,
         ],
       },
+      {
+        name: 'read',
+        description: 'Print the current content of one artifact of a change',
+        acceptsPositional: true,
+        positionalType: 'change-id',
+        positionals: [
+          { name: 'change', type: 'change-id' },
+          { name: 'artifact' },
+        ],
+        flags: [
+          {
+            name: 'capability',
+            description: 'Which capability a per-capability artifact (such as specs) refers to',
+            takesValue: true,
+          },
+          COMMON_FLAGS.json,
+          COMMON_FLAGS.store,
+        ],
+      },
+      {
+        name: 'write',
+        description: 'Write one artifact of a change from a file or stdin',
+        acceptsPositional: true,
+        positionalType: 'change-id',
+        positionals: [
+          { name: 'change', type: 'change-id' },
+          { name: 'artifact' },
+        ],
+        flags: [
+          {
+            name: 'capability',
+            description: 'Which capability a per-capability artifact (such as specs) refers to',
+            takesValue: true,
+          },
+          {
+            name: 'file',
+            description: 'The content to write; "-" reads stdin',
+            takesValue: true,
+            completionType: 'path',
+          },
+          {
+            name: 'base',
+            description: 'The version this write revises; refused when it is no longer current',
+            takesValue: true,
+          },
+          {
+            name: 'force',
+            description: 'Write even when --base is no longer current',
+          },
+          COMMON_FLAGS.json,
+          COMMON_FLAGS.store,
+        ],
+      },
     ],
+  },
+  {
+    name: 'task',
+    description: 'Take, complete or release a task of a change by its ordinal',
+    flags: [],
+    subcommands: (['take', 'complete', 'release'] as const).map((verb) => ({
+      name: verb,
+      description:
+        verb === 'take'
+          ? 'Reserve a task before working on it'
+          : verb === 'complete'
+            ? 'Mark a task done at the commit that finishes it'
+            : 'Give a reserved task back',
+      acceptsPositional: true,
+      positionalType: 'change-id' as const,
+      positionals: [{ name: 'change', type: 'change-id' as const }, { name: 'ordinal' }],
+      flags: [COMMON_FLAGS.json, COMMON_FLAGS.store],
+    })),
   },
   {
     name: 'spec',
