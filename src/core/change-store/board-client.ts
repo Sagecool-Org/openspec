@@ -63,6 +63,14 @@ export interface SearchArgs {
   offset?: number;
 }
 
+/** A page of a search: the matching tuples, how many match in all, and the cursor for the next page. */
+export interface SearchResult {
+  items: BoardTuple[];
+  total: number;
+  cursor?: number | string | null;
+  [key: string]: unknown;
+}
+
 export class BoardError extends Error {
   constructor(
     message: string,
@@ -226,7 +234,7 @@ export class BoardClient {
     return this.call('get', { id });
   }
 
-  async search(args: SearchArgs = {}): Promise<{ tuples: BoardTuple[]; [key: string]: unknown }> {
+  async search(args: SearchArgs = {}): Promise<SearchResult> {
     return this.call('search', args as Record<string, unknown>);
   }
 

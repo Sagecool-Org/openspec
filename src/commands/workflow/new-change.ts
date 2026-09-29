@@ -10,7 +10,6 @@
 import ora from 'ora';
 import path from 'path';
 import { validateChangeName } from '../../utils/change-utils.js';
-import { FileChangeStore } from '../../core/change-store/index.js';
 import { formatChangeLocation } from '../../core/planning-home.js';
 import {
   resolveRootForCommand,
@@ -121,7 +120,7 @@ export async function newChangeCommand(name: string | undefined, options: NewCha
       spinner.start(`Creating change '${name}' with schema '${resolvedSchema}'...`);
     }
 
-    const result = await FileChangeStore.forRoot(root).createChange(name, {
+    const result = await root.store.createChange(name, {
       schema: options.schema,
       defaultSchema: root.defaultSchema,
       metadata: {
@@ -129,11 +128,9 @@ export async function newChangeCommand(name: string | undefined, options: NewCha
       },
     });
 
-    // If description provided, create README.md with description
+    // If description provided, add a README.md to the change
     if (options.description) {
-      const { promises: fs } = await import('fs');
-      const readmePath = path.join(result.changeDir, 'README.md');
-      await fs.writeFile(readmePath, `# ${name}\n\n${options.description}\n`, 'utf-8');
+      await root.store.writeArtifact(name, 'README.md', `# ${name}\n\n${options.description}\n`);
     }
 
     const payload: NewChangeOutput = {

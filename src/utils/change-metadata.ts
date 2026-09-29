@@ -56,21 +56,7 @@ export function writeChangeMetadata(
   projectRoot?: string
 ): void {
   const metaPath = path.join(changeDir, METADATA_FILENAME);
-
-  // Validate schema exists
-  validateSchemaName(metadata.schema, projectRoot);
-
-  // Validate with Zod
-  const parseResult = ChangeMetadataSchema.safeParse(metadata);
-  if (!parseResult.success) {
-    throw new ChangeMetadataError(
-      `Invalid metadata: ${parseResult.error.message}`,
-      metaPath
-    );
-  }
-
-  // Write YAML file
-  const content = yaml.stringify(parseResult.data);
+  const content = serializeChangeMetadata(metadata, metaPath, projectRoot);
   try {
     fs.writeFileSync(metaPath, content, 'utf-8');
   } catch (err) {
@@ -81,6 +67,79 @@ export function writeChangeMetadata(
       ioError
     );
   }
+}
+
+/**
+ * Validates metadata and renders it as the YAML text of `.openspec.yaml`.
+ * Shared by every store: the file store writes the text to disk, the board
+ * store posts it as the metadata artefact's body.
+ *
+ * @param metadataPath - Where the metadata lives, for error messages
+ */
+export function serializeChangeMetadata(
+  metadata: ChangeMetadata,
+  metadataPath: string,
+  projectRoot?: string
+): string {
+  // Validate schema exists
+  validateSchemaName(metadata.schema, projectRoot);
+
+  // Validate with Zod
+  const parseResult = ChangeMetadataSchema.safeParse(metadata);
+  if (!parseResult.success) {
+    throw new ChangeMetadataError(
+      `Invalid metadata: ${parseResult.error.message}`,
+      metadataPath
+    );
+  }
+
+  return yaml.stringify(parseResult.data);
+}
+
+/**
+ * Parses and validates the YAML text of `.openspec.yaml`, wherever it was
+ * read from: the YAML must parse, satisfy the schema, and name a schema the
+ * project knows.
+ *
+ * @param metadataPath - Where the metadata lives, for error messages
+ * @throws ChangeMetadataError on any defect
+ */
+export function parseChangeMetadataText(
+  content: string,
+  metadataPath: string,
+  projectRoot?: string
+): ChangeMetadata {
+  let parsed: unknown;
+  try {
+    parsed = yaml.parse(content);
+  } catch (err) {
+    const parseError = err instanceof Error ? err : new Error(String(err));
+    throw new ChangeMetadataError(
+      `Invalid YAML in metadata file: ${parseError.message}`,
+      metadataPath,
+      parseError
+    );
+  }
+
+  // Validate with Zod
+  const parseResult = ChangeMetadataSchema.safeParse(parsed);
+  if (!parseResult.success) {
+    throw new ChangeMetadataError(
+      `Invalid metadata: ${parseResult.error.message}`,
+      metadataPath
+    );
+  }
+
+  // Validate that the schema exists
+  const availableSchemas = listSchemas(projectRoot);
+  if (!availableSchemas.includes(parseResult.data.schema)) {
+    throw new ChangeMetadataError(
+      `Unknown schema '${parseResult.data.schema}'. Available: ${availableSchemas.join(', ')}`,
+      metadataPath
+    );
+  }
+
+  return parseResult.data;
 }
 
 /**
@@ -113,37 +172,7 @@ export function readChangeMetadata(
     );
   }
 
-  let parsed: unknown;
-  try {
-    parsed = yaml.parse(content);
-  } catch (err) {
-    const parseError = err instanceof Error ? err : new Error(String(err));
-    throw new ChangeMetadataError(
-      `Invalid YAML in metadata file: ${parseError.message}`,
-      metaPath,
-      parseError
-    );
-  }
-
-  // Validate with Zod
-  const parseResult = ChangeMetadataSchema.safeParse(parsed);
-  if (!parseResult.success) {
-    throw new ChangeMetadataError(
-      `Invalid metadata: ${parseResult.error.message}`,
-      metaPath
-    );
-  }
-
-  // Validate that the schema exists
-  const availableSchemas = listSchemas(projectRoot);
-  if (!availableSchemas.includes(parseResult.data.schema)) {
-    throw new ChangeMetadataError(
-      `Unknown schema '${parseResult.data.schema}'. Available: ${availableSchemas.join(', ')}`,
-      metaPath
-    );
-  }
-
-  return parseResult.data;
+  return parseChangeMetadataText(content, metaPath, projectRoot);
 }
 
 export interface ResolveSchemaForChangeOptions {
@@ -293,6 +322,19 @@ function readBooleanMarker(
     return unhonorable(`the metadata file cannot be read (${message})`);
   }
 
+  return markerFromMetadataText(raw, key, projectRootOverride ?? path.resolve(changeDir, '../../..'));
+}
+
+/**
+ * The marker judgement on metadata text already in hand, with exactly the
+ * semantics `readSkipSpecsMarker` documents: the board store applies it to
+ * the metadata tuple's body, the file store to the file it read.
+ */
+export function markerFromMetadataText(
+  raw: string,
+  key: 'skip_specs' | 'retire_capabilities',
+  projectRoot: string
+): MetadataMarker {
   let parsed: unknown;
   try {
     parsed = yaml.parse(raw);
@@ -316,7 +358,6 @@ function readBooleanMarker(
     // resolveSchema alone would normalize and accept); resolveSchema then
     // proves the schema actually parses. Any failure fails closed.
     try {
-      const projectRoot = projectRootOverride ?? path.resolve(changeDir, '../../..');
       if (!listSchemas(projectRoot).includes(result.data.schema)) {
         return unhonorable(`schema: unknown schema '${result.data.schema}'`);
       }
