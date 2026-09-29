@@ -3,7 +3,8 @@ import * as path from 'node:path';
 
 import { FileSystemUtils } from '../utils/file-system.js';
 
-export type PlanningHomeKind = 'repo';
+/** `repo`: changes are files under the root; `board`: changes are tuples on the board the root declares. */
+export type PlanningHomeKind = 'repo' | 'board';
 
 export interface PlanningHome {
   kind: PlanningHomeKind;

@@ -13,7 +13,6 @@ import { resolveArtifactOutputs, artifactOutputExists } from '../artifact-graph/
 import { discoverSpecFiles, hasAnyFileUnder, type DiscoveredSpec } from '../../utils/spec-discovery.js';
 import { createChange, type CreateChangeOptions, type CreateChangeResult } from '../../utils/change-utils.js';
 import { parseTaskLines, resolveTaskFilesForChange, TASK_LINE_PATTERN } from '../../utils/task-progress.js';
-import { ArchiveCommand } from '../archive.js';
 import { getLastModified } from '../list.js';
 import type { ResolvedOpenSpecRoot } from '../root-selection.js';
 import type {
@@ -237,6 +236,9 @@ export class FileChangeStore implements ChangeStore {
   }
 
   async archiveChange(name: string, options: ArchiveChangeOptions = {}): Promise<void> {
+    // Imported here, not at the top: archive resolves roots, and roots now
+    // carry this store, so a static import would be a cycle.
+    const { ArchiveCommand } = await import('../archive.js');
     await new ArchiveCommand().execute(name, {
       ...options,
       ...(this.storeId !== undefined ? { store: this.storeId } : {}),

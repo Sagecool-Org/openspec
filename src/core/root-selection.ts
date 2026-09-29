@@ -39,6 +39,7 @@ import { findRepoPlanningRootSync, type PlanningHome } from './planning-home.js'
 import { classifyOpenSpecDir, storePointerProblem } from './project-config.js';
 import { getGlobalConfig } from './global-config.js';
 import { FileSystemUtils } from '../utils/file-system.js';
+import { BoardChangeStore, FileChangeStore, findBoardConfig, type ChangeStore } from './change-store/index.js';
 
 export type OpenSpecRootSource =
   | 'store'
@@ -66,6 +67,13 @@ export interface ResolvedOpenSpecRoot {
   defaultSchema: 'spec-driven';
   source: OpenSpecRootSource;
   storeId?: string;
+  /**
+   * Where this root's changes live. A root that declares a board in
+   * `.agora.json` gets the board store; a registered store (`--store`, a
+   * declared pointer, the global default) and any other root get the file
+   * store. Never serialised: `toRootOutput` is the JSON shape.
+   */
+  store: ChangeStore;
 }
 
 export interface RootSelectionDiagnostic {
@@ -119,15 +127,38 @@ function makeRoot(
   source: OpenSpecRootSource,
   storeId?: string
 ): ResolvedOpenSpecRoot {
+  const changesDir = path.join(rootPath, 'openspec', 'changes');
+  const specsDir = path.join(rootPath, 'openspec', 'specs');
   return {
     path: rootPath,
-    changesDir: path.join(rootPath, 'openspec', 'changes'),
-    specsDir: path.join(rootPath, 'openspec', 'specs'),
+    changesDir,
+    specsDir,
     archiveDir: path.join(rootPath, 'openspec', 'changes', 'archive'),
     defaultSchema: 'spec-driven',
     source,
     ...(storeId ? { storeId } : {}),
+    store: selectChangeStore(rootPath, changesDir, specsDir, storeId),
   };
+}
+
+/**
+ * A registered store is always a file layout, whatever it contains; only a
+ * root reached by path can declare a board. A declared board that cannot be
+ * used fails here, before any command reads `openspec/changes/` in its place.
+ */
+function selectChangeStore(
+  rootPath: string,
+  changesDir: string,
+  specsDir: string,
+  storeId: string | undefined
+): ChangeStore {
+  if (storeId === undefined) {
+    const board = findBoardConfig(rootPath);
+    if (board) {
+      return new BoardChangeStore({ projectRoot: rootPath, board });
+    }
+  }
+  return new FileChangeStore({ projectRoot: rootPath, changesDir, specsDir, storeId });
 }
 
 function canonicalDirectory(startPath: string): string {
@@ -506,11 +537,11 @@ export function withStoreFlag(root: ResolvedOpenSpecRoot, command: string): stri
 
 /**
  * Compatibility bridge for workflow code that still expects a PlanningHome.
- * The planning home is always repo-shaped.
+ * `kind` says where the changes live; `root` is the repository root either way.
  */
 export function toPlanningHome(root: ResolvedOpenSpecRoot): PlanningHome {
   return {
-    kind: 'repo',
+    kind: root.store.kind === 'board' ? 'board' : 'repo',
     root: root.path,
     changesDir: root.changesDir,
     defaultSchema: root.defaultSchema,

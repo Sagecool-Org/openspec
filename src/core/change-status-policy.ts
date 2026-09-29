@@ -1,7 +1,7 @@
-import type { PlanningHome } from './planning-home.js';
+import type { PlanningHome, PlanningHomeKind } from './planning-home.js';
 
 export interface PlanningHomeSummary {
-  kind: 'repo';
+  kind: PlanningHomeKind;
   root: string;
   changesDir: string;
   defaultSchema: string;
