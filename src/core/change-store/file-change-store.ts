@@ -106,7 +106,9 @@ export class FileChangeStore implements ChangeStore {
 
   async readMarker(name: string, marker: MetadataMarkerName): Promise<MetadataMarker> {
     const changeDir = this.changeDir(name);
-    return marker === 'skip_specs' ? readSkipSpecsMarker(changeDir) : readRetireCapabilitiesMarker(changeDir);
+    return marker === 'skip_specs'
+      ? readSkipSpecsMarker(changeDir, this.projectRoot)
+      : readRetireCapabilitiesMarker(changeDir, this.projectRoot);
   }
 
   async resolveOutputs(name: string, generates: string): Promise<string[]> {

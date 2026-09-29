@@ -794,12 +794,11 @@ async function fingerprintPortableContent(filePath: string): Promise<string> {
 async function assertRetirementAuthorization(
   changeDir: string,
   expectedFingerprint: string,
-  options: { verifyMarker?: boolean } = {}
+  options: { projectRoot?: string } = {}
 ): Promise<void> {
   const metadataPath = path.join(changeDir, METADATA_FILENAME);
   const before = await fingerprintPortableContent(metadataPath);
-  const markerStillDeclared =
-    options.verifyMarker === false || readRetireCapabilitiesMarker(changeDir).declared;
+  const markerStillDeclared = readRetireCapabilitiesMarker(changeDir, options.projectRoot).declared;
   const after = await fingerprintPortableContent(metadataPath);
   if (
     before !== expectedFingerprint ||
@@ -1237,7 +1236,7 @@ export class ArchiveCommand {
       // proposal warnings — a gap that predates the marker and is left
       // unchanged here.)
       if (!hasDeltaSpecs) {
-        const marker = readSkipSpecsMarker(changeDir);
+        const marker = readSkipSpecsMarker(changeDir, root.path);
         if (marker.invalidReason) {
           hasDeltaSpecs = true;
         } else if (marker.declared) {
@@ -1332,7 +1331,7 @@ export class ArchiveCommand {
     }
 
     // Show progress and check for incomplete tasks
-    const progress = await getTaskProgressForChange(changesDir, changeName, path.resolve(changesDir, '..', '..'));
+    const progress = await getTaskProgressForChange(changesDir, changeName, root.path);
     if (!json) {
       const status = formatTaskStatus(progress);
       console.log(`Task status: ${status}`);
@@ -1387,7 +1386,7 @@ export class ArchiveCommand {
     // retire a capability at all. An unhonorable marker counts as undeclared,
     // exactly as skip_specs treats one, so metadata the rest of the CLI rejects
     // can never authorise a deletion.
-    const retirementMarker = readRetireCapabilitiesMarker(changeDir);
+    const retirementMarker = readRetireCapabilitiesMarker(changeDir, root.path);
     const retirementDeclared = retirementMarker.declared;
     const retirementAuthorizationFingerprint = retirementDeclared
       ? await fingerprintPortableContent(path.join(changeDir, METADATA_FILENAME))
@@ -1516,7 +1515,7 @@ export class ArchiveCommand {
           // delete a requirement added while the prompt was waiting.
           if (prepareError === undefined) {
             try {
-              const currentRetirementMarker = readRetireCapabilitiesMarker(changeDir);
+              const currentRetirementMarker = readRetireCapabilitiesMarker(changeDir, root.path);
               if (
                 currentRetirementMarker.declared !== retirementMarker.declared ||
                 currentRetirementMarker.invalidReason !== retirementMarker.invalidReason
@@ -1779,7 +1778,8 @@ export class ArchiveCommand {
                   }
                   await assertRetirementAuthorization(
                     changeDir,
-                    retirementAuthorizationFingerprint
+                    retirementAuthorizationFingerprint,
+                    { projectRoot: root.path }
                   );
                   if (
                     (await fingerprintSpecInputs(p.update)) !==
@@ -1794,7 +1794,8 @@ export class ArchiveCommand {
                 verifyDisplaced: async (displacedPath) => {
                   await assertRetirementAuthorization(
                     changeDir,
-                    retirementAuthorizationFingerprint!
+                    retirementAuthorizationFingerprint!,
+                    { projectRoot: root.path }
                   );
                   if (
                     (await fingerprintMovablePath(displacedPath)) !==
@@ -1915,7 +1916,8 @@ export class ArchiveCommand {
             if (hasRetirements) {
               await assertRetirementAuthorization(
                 changeDir,
-                retirementAuthorizationFingerprint!
+                retirementAuthorizationFingerprint!,
+                { projectRoot: root.path }
               );
             }
             const verifyArchivedDeltas = async (
@@ -1925,16 +1927,16 @@ export class ArchiveCommand {
                 await assertRetirementAuthorization(
                   archivePath,
                   retirementAuthorizationFingerprint!,
-                  // Archived changes are nested one level deeper than active
-                  // changes, so the marker reader cannot resolve their schema.
-                  // Exact content equality proves this is the authorization
-                  // already validated at the active path.
-                  { verifyMarker: false }
+                  // The archived copy sits one level deeper than an active
+                  // change, so the marker reader is given the resolved root
+                  // rather than left to derive one from the path.
+                  { projectRoot: root.path }
                 );
                 if (stagedSource) {
                   await assertRetirementAuthorization(
                     stagedSource,
-                    retirementAuthorizationFingerprint!
+                    retirementAuthorizationFingerprint!,
+                    { projectRoot: root.path }
                   );
                 }
               }
@@ -2088,7 +2090,7 @@ export class ArchiveCommand {
     try {
       const progressList: Array<{ id: string; status: string }> = [];
       for (const id of changeDirs) {
-        const progress = await getTaskProgressForChange(changesDir, id, path.resolve(changesDir, '..', '..'));
+        const progress = await getTaskProgressForChange(changesDir, id, root.path);
         const status = formatTaskStatus(progress);
         progressList.push({ id, status });
       }

@@ -9,6 +9,7 @@ import { Change, Delta } from '../core/schemas/index.js';
 import type { RootOutput } from '../core/root-selection.js';
 import { isInteractive } from '../utils/interactive.js';
 import { getActiveChangeIds } from '../utils/item-discovery.js';
+import { resolveCurrentPlanningHomeSync } from '../core/planning-home.js';
 import { getTaskProgressForChange } from '../utils/task-progress.js';
 import { FileSystemUtils } from '../utils/file-system.js';
 import { discoverSpecFiles } from '../utils/spec-discovery.js';
@@ -61,21 +62,26 @@ export class ChangeCommand {
   private converter: JsonConverter;
   private rootPath?: string;
 
-  // rootPath is set only by root-aware callers (top-level `show`); the
-  // deprecated noun-form commands stay cwd-based.
+  // rootPath is set by root-aware callers (top-level `show`); the deprecated
+  // noun-form commands resolve the nearest planning root from the cwd instead
+  // of assuming the cwd is the root.
   constructor(rootPath?: string) {
     this.converter = new JsonConverter();
     this.rootPath = rootPath;
   }
 
+  private getRootPath(): string {
+    return this.rootPath ?? resolveCurrentPlanningHomeSync().root;
+  }
+
   private getChangesPath(): string {
-    return path.join(this.rootPath ?? process.cwd(), 'openspec', 'changes');
+    return path.join(this.getRootPath(), 'openspec', 'changes');
   }
 
   // Main specs resolve against the same root as changes, so `--diff` reads the
   // selected store's specs rather than whatever sits under the cwd.
   private getSpecsPath(): string {
-    return path.join(this.rootPath ?? process.cwd(), 'openspec', 'specs');
+    return path.join(this.getRootPath(), 'openspec', 'specs');
   }
 
   /**
@@ -92,7 +98,7 @@ export class ChangeCommand {
     if (!changeName) {
       const canPrompt = isInteractive(options);
       // Offer exactly the changes `show <name>` can resolve.
-      const changes = await getActiveChangeIds(this.rootPath ?? process.cwd());
+      const changes = await getActiveChangeIds(this.getRootPath());
       if (canPrompt && changes.length > 0) {
         const { select } = await import('@inquirer/prompts');
         const selected = await select({
@@ -411,12 +417,13 @@ export class ChangeCommand {
    * - JSON: array of { id, title, deltaCount, taskStatus }, sorted by id
    */
   async list(options?: { json?: boolean; long?: boolean }): Promise<void> {
-    const changesPath = path.join(process.cwd(), 'openspec', 'changes');
-    
+    const rootPath = this.getRootPath();
+    const changesPath = this.getChangesPath();
+
     // Same directory-based resolution as `openspec list`, the command this
     // deprecated alias points users at. Every output path below already
     // tolerates a change whose proposal.md is missing or unreadable.
-    const changes = await getActiveChangeIds();
+    const changes = await getActiveChangeIds(rootPath);
 
     if (options?.json) {
       const changeDetails = await Promise.all(
@@ -428,7 +435,7 @@ export class ChangeCommand {
           // this deprecated noun-form list cannot re-fork the resolution
           // (#1202). Tasks are independent of the proposal: a change can carry
           // tasks before, or without, a proposal.md.
-          const taskStatus = await getTaskProgressForChange(changesPath, changeName, process.cwd());
+          const taskStatus = await getTaskProgressForChange(changesPath, changeName, rootPath);
 
           // No proposal yet is an ordinary state (scaffolded change, or a
           // schema with no proposal artifact), so name the change rather than
@@ -474,7 +481,7 @@ export class ChangeCommand {
       for (const changeName of sorted) {
         const changeDir = path.join(changesPath, changeName);
         const proposalPath = path.join(changeDir, 'proposal.md');
-        const { total, completed } = await getTaskProgressForChange(changesPath, changeName, process.cwd());
+        const { total, completed } = await getTaskProgressForChange(changesPath, changeName, rootPath);
         const taskStatusText = total > 0 ? ` [tasks ${completed}/${total}]` : '';
         if (await isDefinitelyMissing(proposalPath)) {
           console.log(`${changeName}: (no proposal.md yet)${taskStatusText}`);
@@ -496,11 +503,11 @@ export class ChangeCommand {
   }
 
   async validate(changeName?: string, options?: { strict?: boolean; json?: boolean; noInteractive?: boolean }): Promise<void> {
-    const changesPath = path.join(process.cwd(), 'openspec', 'changes');
-    
+    const changesPath = this.getChangesPath();
+
     if (!changeName) {
       const canPrompt = isInteractive(options);
-      const changes = await getActiveChangeIds();
+      const changes = await getActiveChangeIds(this.getRootPath());
       if (canPrompt && changes.length > 0) {
         const { select } = await import('@inquirer/prompts');
         const selected = await select({

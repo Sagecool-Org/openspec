@@ -441,7 +441,7 @@ export class Validator {
       });
     }
 
-    const marker = readSkipSpecsMarker(changeDir);
+    const marker = readSkipSpecsMarker(changeDir, options.projectRoot);
     if (marker.invalidReason) {
       issues.push({ level: 'ERROR', path: METADATA_FILENAME, message: this.formatInvalidMarkerMessage(marker.invalidReason) });
     }
