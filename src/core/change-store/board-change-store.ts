@@ -705,8 +705,10 @@ export class BoardChangeStore implements ChangeStore {
     return { id: artefactId };
   }
 
-  async archiveChange(_name: string, _options?: ArchiveChangeOptions): Promise<void> {
-    return this.unavailable('archive a change');
+  async archiveChange(name: string, options: ArchiveChangeOptions = {}): Promise<void> {
+    // Imported here: the archive module reaches back to this store's type.
+    const { archiveBoardChange } = await import('./board-archive.js');
+    await archiveBoardChange(this, name, options);
   }
 
   async changeLastModified(name: string): Promise<Date | null> {

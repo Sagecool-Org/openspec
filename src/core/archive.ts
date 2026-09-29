@@ -25,6 +25,7 @@ import {
 } from './specs-apply.js';
 import { discoverSpecFiles, hasAnyFileUnder } from '../utils/spec-discovery.js';
 import { METADATA_FILENAME, readRetireCapabilitiesMarker, readSkipSpecsMarker } from '../utils/change-metadata.js';
+import type { BoardChangeStore } from './change-store/board-change-store.js';
 import { confirmPrompt, isNonInteractivePromptError } from '../utils/interactive.js';
 import { FileSystemUtils } from '../utils/file-system.js';
 import { folderStyleNameProblem } from './id.js';
@@ -205,7 +206,7 @@ interface ArchiveResult {
  * could answer it (#1479). Either way it carries a machine-readable
  * diagnostic and exits non-zero.
  */
-class ArchiveBlockedError extends Error {
+export class ArchiveBlockedError extends Error {
   readonly diagnostic: ArchiveDiagnostic;
 
   constructor(code: string, message: string, fix?: string) {
@@ -1065,6 +1066,41 @@ export class ArchiveCommand {
         return;
       }
       throw error;
+    }
+
+    // A board change is archived natively: no directory move, the specs
+    // merged in place and every tuple of the change retired.
+    if (root.store.kind !== 'file') {
+      try {
+        if (!changeName) {
+          throw new ArchiveBlockedError(
+            'archive_change_required',
+            'Name the change to archive: openspec archive <change-name>.',
+            'Run openspec list to see the changes on the board.'
+          );
+        }
+        const { archiveBoardChange } = await import('./change-store/board-archive.js');
+        const result = await archiveBoardChange(root.store as BoardChangeStore, changeName, options);
+        if (json) {
+          console.log(JSON.stringify({ archive: result, root: toRootOutput(root) }, null, 2));
+          return;
+        }
+        console.log(`Archived change '${result.change}' on the board (${result.archivedTuples} tuple(s) retired).`);
+        if (result.specsUpdated && result.totals) {
+          const { added, modified, removed, renamed } = result.totals;
+          console.log(`Specs updated in ${root.specsDir}: +${added} ~${modified} -${removed} →${renamed}. Commit them.`);
+        }
+        for (const warning of result.warnings ?? []) {
+          console.log(chalk.yellow(`  ⚠ ${warning}`));
+        }
+      } catch (error) {
+        if (json) {
+          this.printJsonFailure(root, toArchiveDiagnostic(error));
+          return;
+        }
+        throw error;
+      }
+      return;
     }
 
     if (json) {

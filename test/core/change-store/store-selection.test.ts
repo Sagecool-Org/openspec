@@ -6,7 +6,6 @@ import { resolveOpenSpecRoot, toPlanningHome, toRootOutput } from '../../../src/
 import {
   BoardChangeStore,
   BoardConfigError,
-  BoardStoreUnavailableError,
   BoardUnreachableError,
   FileChangeStore,
   findBoardConfig,
@@ -76,8 +75,7 @@ describe('change store selection by the resolved root', () => {
     const resolved = await resolveOpenSpecRoot({ startPath: root });
     await expect(resolved.store.listChanges()).rejects.toBeInstanceOf(BoardUnreachableError);
     await expect(resolved.store.listChanges()).rejects.toThrow('board at http://127.0.0.1:1 unreachable');
-    await expect(resolved.store.archiveChange('demo')).rejects.toBeInstanceOf(BoardStoreUnavailableError);
-    await expect(resolved.store.archiveChange('demo')).rejects.toThrow('"sagecool"');
+    await expect(resolved.store.archiveChange('demo')).rejects.toBeInstanceOf(BoardUnreachableError);
   });
 
   it('refuses a declared board it cannot use rather than reading files', async () => {

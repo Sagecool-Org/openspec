@@ -54,3 +54,4 @@ export {
   type GitRunner,
   type RepositoryContext,
 } from './board-conventions.js';
+export { archiveBoardChange, type BoardArchiveResult } from './board-archive.js';
