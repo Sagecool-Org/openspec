@@ -25,9 +25,19 @@ export interface ChangeCommandStatus {
 }
 
 export interface TaskItem {
+  /** The task's identity: its ordinal as text on the file store, the task tuple's id on the board. */
   id: string;
   description: string;
   done: boolean;
+  /** The task's position in the tasks artefact, from 1. Present on a board change. */
+  ordinal?: number;
+}
+
+/** One artefact's current content, for a change whose artefacts are not files on disk. */
+export interface ArtifactContent {
+  /** The path the JSON contract names for this artefact (absolute-shaped under changeDir). */
+  path: string;
+  content: string;
 }
 
 export interface ApplyInstructions {
@@ -35,6 +45,11 @@ export interface ApplyInstructions {
   changeDir: string;
   schemaName: string;
   contextFiles: Record<string, string[]>;
+  /**
+   * The content of every context file, by artifact id, for a change whose
+   * artefacts are not files (a board change): the skill never reads a path.
+   */
+  contextContent?: Record<string, ArtifactContent[]>;
   progress: {
     total: number;
     complete: number;
@@ -62,6 +77,10 @@ export interface ApplyInstructions {
 
 export interface ArchiveInstructions {
   changeName: string;
+  /** Task progress from the change's tuples, for a board change: what archive would refuse on. */
+  progress?: { total: number; complete: number; remaining: number };
+  /** The change's tasks with ids and ordinals, for a board change. */
+  tasks?: TaskItem[];
   /** Current project background from the selected root. */
   context?: string;
   /** Current advisory guidance for archive. */
@@ -207,9 +226,7 @@ export async function validateChangeExistsIn(
     if (available.length === 0) {
       throw new Error(`No changes found. Create one with: ${newChangeHint}`);
     }
-    throw new Error(
-      `Missing required option --change. Available changes:\n  ${available.join('\n  ')}`
-    );
+    throw new Error(`Missing required option --change. Available changes:\n  ${available.join('\n  ')}`);
   }
 
   // Validate change name format to prevent path traversal
@@ -223,13 +240,9 @@ export async function validateChangeExistsIn(
   if (!exists) {
     const available = await store.listChanges();
     if (available.length === 0) {
-      throw new Error(
-        `Change '${changeName}' not found. No changes exist. Create one with: ${newChangeHint}`
-      );
+      throw new Error(`Change '${changeName}' not found. No changes exist. Create one with: ${newChangeHint}`);
     }
-    throw new Error(
-      `Change '${changeName}' not found. Available changes:\n  ${available.join('\n  ')}`
-    );
+    throw new Error(`Change '${changeName}' not found. Available changes:\n  ${available.join('\n  ')}`);
   }
 
   return changeName;
@@ -245,9 +258,7 @@ export function validateSchemaExists(schemaName: string, projectRoot?: string): 
   const schemaDir = getSchemaDir(schemaName, projectRoot);
   if (!schemaDir) {
     const availableSchemas = listSchemas(projectRoot);
-    throw new Error(
-      `Schema '${schemaName}' not found. Available schemas:\n  ${availableSchemas.join('\n  ')}`
-    );
+    throw new Error(`Schema '${schemaName}' not found. Available schemas:\n  ${availableSchemas.join('\n  ')}`);
   }
   return schemaName;
 }

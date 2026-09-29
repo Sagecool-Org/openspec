@@ -104,6 +104,8 @@ export interface ArtifactInstructions {
   resolvedOutputPath: string;
   /** Existing concrete output files for this artifact */
   existingOutputPaths: string[];
+  /** For a board change: where the artifact is written, with the version to revise. */
+  destination?: BoardDestination;
   /** Artifact description */
   description: string;
   /** Guidance on how to create this artifact (from schema instruction field) */
@@ -149,6 +151,21 @@ export interface DependencyInfo {
   description: string;
   /** True when the dependency is satisfied via skip_specs - no files exist to read */
   skipped?: boolean;
+  /**
+   * The dependency's current content, for a change whose artefacts are not
+   * files (a board change), so the consumer never needs to read a path. Several
+   * outputs (a glob) are joined, each under a comment naming its path.
+   */
+  content?: string;
+}
+
+/** Where a board change's artefact is written: the store's own address, not a path. */
+export interface BoardDestination {
+  kind: 'board';
+  change: string;
+  artifact: string;
+  /** The live version to name as `--base` on the write; absent when the artefact does not exist yet or has several outputs. */
+  baseId?: string;
 }
 
 /**

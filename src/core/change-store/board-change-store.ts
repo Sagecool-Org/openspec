@@ -42,6 +42,8 @@ export interface BoardChangeStoreOptions {
 
 const DEFAULT_SCHEMA = 'spec-driven';
 const METADATA_FILENAME = '.openspec.yaml';
+/** One artefact is bounded like upstream's project context: larger content is a page nobody reads. */
+export const MAX_ARTIFACT_BYTES = 50 * 1024;
 
 /**
  * Thrown by an operation the board store does not perform yet (tasks 4.x of
@@ -452,6 +454,13 @@ export class BoardChangeStore implements ChangeStore {
     options: WriteArtifactOptions = {}
   ): Promise<WriteArtifactResult> {
     const keys = artifactKeysFor(artifactPath);
+    const size = Buffer.byteLength(content, 'utf-8');
+    if (size > MAX_ARTIFACT_BYTES) {
+      throw new Error(
+        `${artifactPath} of change '${name}' is ${size} bytes; a board artefact is bounded at ${MAX_ARTIFACT_BYTES} bytes ` +
+          `(the same cap as project context) because its whole content rides in every instruction. Split it.`
+      );
+    }
     const live = await this.liveArtefact(name, artifactPath);
     if (options.base !== undefined && !options.force && options.base !== live?.id) {
       throw new StaleArtifactError(name, artifactPath, options.base, live?.id ?? null);
