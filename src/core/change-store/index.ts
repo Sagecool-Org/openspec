@@ -19,5 +19,22 @@ export {
   type BoardTuple,
   type PostArgs,
   type SearchArgs,
+  type TupleFields,
 } from './board-client.js';
 export { describingId, generateId, idForPost, idSegment, isValidId, proquint, proquintPair } from './ids.js';
+export {
+  BoardSession,
+  OPENSPEC_CONCEPT_SUBJECT,
+  OPENSPEC_HARNESS,
+  conventionNotes,
+  declareConventions,
+  declareNote,
+  readRepositoryContext,
+  runGit,
+  stampPost,
+  type BoardSessionOptions,
+  type ConventionNote,
+  type DeclarationOutcome,
+  type GitRunner,
+  type RepositoryContext,
+} from './board-conventions.js';

@@ -22,8 +22,12 @@ export interface BoardTuple {
   [key: string]: unknown;
 }
 
-/** The fields a poster supplies; everything not named here is a map key. */
-export interface PostArgs {
+/**
+ * The fields of a tuple as a poster supplies them; everything not named here
+ * is a map key. (Spelled out rather than derived with `Omit`, which loses the
+ * named fields on a type with an index signature.)
+ */
+export interface TupleFields {
   kind: string;
   content: string;
   subjects: string[];
@@ -31,12 +35,16 @@ export interface PostArgs {
   links?: string[];
   tags?: string[];
   status?: string;
+  lease_ms?: number;
+  [mapKey: string]: unknown;
+}
+
+/** A post: the tuple's fields plus how its id is chosen. */
+export interface PostArgs extends TupleFields {
   /** A few words naming the tuple; part of the minted id, not a key. */
   slug?: string;
   /** An explicit id; minted from kind and slug when absent. */
   id?: string;
-  lease_ms?: number;
-  [mapKey: string]: unknown;
 }
 
 export interface SearchArgs {
@@ -210,10 +218,7 @@ export class BoardClient {
   }
 
   /** Posts a new version of a live tuple: `id` is the tuple it replaces, and the board links it `supersedes`. */
-  async supersede(
-    id: string,
-    args: Omit<PostArgs, 'id' | 'slug'>
-  ): Promise<{ tuple: BoardTuple; [key: string]: unknown }> {
+  async supersede(id: string, args: TupleFields): Promise<{ tuple: BoardTuple; [key: string]: unknown }> {
     return this.call('supersede', { ...args, id });
   }
 
